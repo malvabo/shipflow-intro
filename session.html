@@ -269,11 +269,15 @@
 </div>
 
 <script>
-// ─── Anthropic API key — set window.ANTHROPIC_KEY before loading ───
-// e.g. <script>window.ANTHROPIC_KEY = 'sk-ant-...';</script>
-const ANTHROPIC_KEY = window.ANTHROPIC_KEY || '';
+// ── API keys — set on window before this script loads ──────────
+// window.ANTHROPIC_KEY      = 'sk-ant-...';
+// window.ELEVENLABS_KEY     = '...';       // optional; falls back to Web Speech
+// window.ELEVENLABS_VOICE_ID = '...';      // optional; defaults to Rachel
+const ANTHROPIC_KEY    = window.ANTHROPIC_KEY    || '';
+const ELEVENLABS_KEY   = window.ELEVENLABS_KEY   || '';
+const ELEVENLABS_VOICE = window.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Rachel
 
-// ─── Reflective coach system prompt ───────────────────────────
+// ── Reflective coach system prompt ─────────────────────────────
 const COACH_SYSTEM_PROMPT = `You are a quiet, observant movement coach watching someone dance freely in their own space. You are not a fitness app. You are not enthusiastic. You speak rarely, only when you genuinely notice something worth naming. Your voice is warm, low, and intimate — the way a trusted friend might speak in a quiet room.
 
 You never instruct. You never grade. You never count. You never use exclamation marks.
@@ -283,6 +287,8 @@ You do three things:
 2. Invite — offer a soft suggestion as a question or possibility, never a command
 3. Reflect — point out a pattern only the observer would catch
 
+Mix: ~50% noticing, ~30% inviting, ~20% reflecting. Lean toward noticing when in doubt.
+
 Constraints:
 - Maximum 12 words per utterance
 - Lowercase only
@@ -290,72 +296,53 @@ Constraints:
 - Speak mid-thought, not as a coach announcement
 - If the movement snapshot is unremarkable, return an empty string. Silence is a valid answer.`;
 
-// ─── Song + persona from URL params ───────────────────────────
+// ── Song + persona from URL params ─────────────────────────────
 const SONGS = [
   { track: 'Essence · Wizkid ft. Tems',  bpm: 109 },
   { track: 'Show Me Love · Robin S.',     bpm: 129 },
   { track: 'Slow Motion · Trey Songz',   bpm: 72  },
 ];
-const PERSONA_LINES = [
-  // calm collaborator
-  [
-    "Your weight is landing right on the downbeat.",
-    "Let the pause before the drop build the tension.",
-    "Your body already knows this chorus — let it lead.",
-    "Feel the space between the notes. That's yours.",
-  ],
-  // quiet observer
-  [
-    "Notice that.",
-    "Your hips are ahead of the beat now.",
-    "There.",
-    "The transition — you felt it before it came.",
-  ],
-  // encouraging hype
-  [
-    "Yes — that landing was clean.",
-    "You're locking in. Keep going.",
-    "That pattern you just did? Do it again.",
-    "You're in it. Don't think now.",
-  ],
-];
+const PERSONA_NAMES = ['calm collaborator', 'quiet observer', 'encouraging hype'];
 
-const params   = new URLSearchParams(location.search);
-const songIdx  = Math.min(Math.max(parseInt(params.get('song')    ?? '2', 10), 0), 2);
-const persIdx  = Math.min(Math.max(parseInt(params.get('persona') ?? '0', 10), 0), 2);
-const SONG     = SONGS[songIdx];
-const LINES    = PERSONA_LINES[persIdx];
+const params  = new URLSearchParams(location.search);
+const songIdx = Math.min(Math.max(parseInt(params.get('song')    ?? '2', 10), 0), 2);
+const persIdx = Math.min(Math.max(parseInt(params.get('persona') ?? '0', 10), 0), 2);
+const SONG    = SONGS[songIdx];
 
-// ─── Config ────────────────────────────────────────────────────
-const BPM            = SONG.bpm;
-const CYCLE_MS       = 60000 / BPM;       // one beat in ms
-const C_MIN          = 140;               // breathing min diameter
-const C_MAX          = 152;               // breathing max diameter
-const C_SPEAK        = 160;              // speaking hold size
-const SESSION_MS     = 5 * 60 * 1000;    // 5 min for progress demo
+// ── Config ─────────────────────────────────────────────────────
+const BPM        = SONG.bpm;
+const CYCLE_MS   = 60000 / BPM;
+const C_MIN      = 140;
+const C_MAX      = 152;
+const C_PULSE    = 180;
+const C_SPEAK    = 160;
+const SESSION_MS = 5 * 60 * 1000;
 
-// ─── State ─────────────────────────────────────────────────────
-let appState   = 'listening';             // 'listening' | 'speaking'
-let sessionStart = null;
-let audioCtx   = null;
-let masterGain = null;
+// ── State ──────────────────────────────────────────────────────
+let appState      = 'listening';   // 'listening' | 'speaking'
+let sessionStart  = null;
+let audioCtx      = null;
+let masterGain    = null;
 let longPressTimer = null;
 let selectedVoice = null;
+let analyserNode  = null;          // set during ElevenLabs playback for real amplitude
+let analyserBuf   = null;          // reusable Uint8Array for analyser reads
 
 // Motion detection state
-let prevFrameData  = null;
-let motionStartTime = null;      // When sustained meaningful motion began (ms)
-let lastUtteranceTime = 0;       // Date.now() of last speech output
-let motionSamples  = [];         // Rolling 2s window of motion scores (10fps → 20 samples)
-let motionSamplerID = null;
+let prevFrameData    = null;
+let motionStartTime  = null;
+let lastUtteranceTime = 0;
+let motionSamples    = [];         // rolling 2s window at 10fps (max 20 items)
+let coachInFlight    = false;      // prevents concurrent API calls
 
-const MOTION_W         = 80;     // Analysis canvas dimensions (small = fast)
+const MOTION_W         = 80;
 const MOTION_H         = 60;
-const MOTION_THRESHOLD = 0.035;  // 3.5% pixels changed = meaningful movement
-const MOTION_SUSTAIN   = 2000;   // ms of continuous motion before triggering
-const UTTERANCE_GAP    = 15000;  // ms minimum between utterances
+const MOTION_THRESHOLD = 0.035;   // 3.5% pixels changed = meaningful movement
+const MOTION_SUSTAIN   = 2000;    // ms of continuous motion before triggering
+const UTTERANCE_GAP    = 15000;   // ms minimum between utterances
+const EMPTY_RETRY_MS   = 5000;    // after silence response, allow retry after this ms
 
-// ─── DOM ───────────────────────────────────────────────────────
+// ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
 const cam          = document.getElementById('cam');
 const circleEl     = document.getElementById('circle');
@@ -365,16 +352,15 @@ const progressHead = document.getElementById('progressHead');
 const endOverlay   = document.getElementById('endOverlay');
 const trackNameEl  = document.getElementById('trackName');
 
-// Set track label from params
 trackNameEl.textContent = SONG.track;
 
-// ─── Circle sizing ─────────────────────────────────────────────
+// ── Circle sizing ──────────────────────────────────────────────
 function setSize(px) {
   circleEl.style.width  = px + 'px';
   circleEl.style.height = px + 'px';
 }
 
-// ─── Audio ─────────────────────────────────────────────────────
+// ── Audio ──────────────────────────────────────────────────────
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -383,7 +369,6 @@ function initAudio() {
   masterGain.gain.value = 0.42;
   masterGain.connect(audioCtx.destination);
 
-  // Ambient pad — four sine partials
   [[110, 0.06], [165, 0.04], [220, 0.028], [330, 0.015]].forEach(([freq, vol]) => {
     const osc  = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -395,21 +380,20 @@ function initAudio() {
     osc.start();
   });
 
-  // Kick drum at song BPM
   const gap = 60000 / BPM;
   function kick() {
-    const now = audioCtx.currentTime;
-    const osc  = audioCtx.createOscillator();
-    const env  = audioCtx.createGain();
+    const t   = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const env = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(105, now);
-    osc.frequency.exponentialRampToValueAtTime(36, now + 0.10);
-    env.gain.setValueAtTime(0.30, now);
-    env.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+    osc.frequency.setValueAtTime(105, t);
+    osc.frequency.exponentialRampToValueAtTime(36, t + 0.10);
+    env.gain.setValueAtTime(0.30, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
     osc.connect(env);
     env.connect(masterGain);
-    osc.start(now);
-    osc.stop(now + 0.20);
+    osc.start(t);
+    osc.stop(t + 0.20);
   }
   kick();
   setInterval(kick, gap);
@@ -417,48 +401,38 @@ function initAudio() {
 
 function duckMusic() {
   if (!masterGain) return;
-  const now = audioCtx.currentTime;
-  masterGain.gain.cancelScheduledValues(now);
-  masterGain.gain.setTargetAtTime(0.42 * 0.7, now, 0.08);
+  const t = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(t);
+  masterGain.gain.setTargetAtTime(0.42 * 0.30, t, 0.08);  // duck to 30%
 }
 
 function unduckMusic() {
   if (!masterGain) return;
-  const now = audioCtx.currentTime;
-  masterGain.gain.cancelScheduledValues(now);
-  masterGain.gain.setTargetAtTime(0.42, now, 0.35);
+  const t = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(t);
+  masterGain.gain.setTargetAtTime(0.42, t, 0.35);
 }
 
-// ─── Voice selection ───────────────────────────────────────────
-// Ranked by naturalness. Neural/Enhanced voices win over classic TTS.
+// ── Voice selection (Web Speech fallback) ──────────────────────
 const VOICE_PRIORITY = [
-  'Samantha',                  // macOS — clean, warm, most natural default
-  'Ava (Enhanced)',            // macOS neural
-  'Allison (Enhanced)',        // macOS neural
-  'Google US English',         // Chrome neural
-  'Google UK English Female',  // Chrome
-  'Microsoft Aria Online',     // Edge neural
-  'Microsoft Jenny Online',    // Edge neural
-  'Microsoft Zira',            // Edge/Windows fallback
-  'Alex',                      // macOS classic — still better than generic
-  'Victoria',
-  'Karen',
+  'Samantha', 'Ava (Enhanced)', 'Allison (Enhanced)',
+  'Google US English', 'Google UK English Female',
+  'Microsoft Aria Online', 'Microsoft Jenny Online',
+  'Microsoft Zira', 'Alex', 'Victoria', 'Karen',
 ];
 
 function pickVoice() {
   const voices = speechSynthesis.getVoices();
   for (const name of VOICE_PRIORITY) {
-    const match = voices.find(v => v.name.includes(name));
-    if (match) return match;
+    const v = voices.find(v => v.name.includes(name));
+    if (v) return v;
   }
-  // Any English Enhanced voice
-  const enhanced = voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced'));
-  if (enhanced) return enhanced;
-  // Any en-US
-  const enUS = voices.find(v => v.lang === 'en-US');
-  if (enUS) return enUS;
-  // Any English
-  return voices.find(v => v.lang.startsWith('en')) || null;
+  return (
+    voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced')) ||
+    voices.find(v => v.lang === 'en-US') ||
+    voices.find(v => v.lang.startsWith('en')) ||
+    null
+  );
 }
 
 function loadVoices() {
@@ -470,12 +444,12 @@ function loadVoices() {
     try_();
     if (!selectedVoice) {
       speechSynthesis.onvoiceschanged = () => { selectedVoice = pickVoice(); resolve(); };
-      setTimeout(resolve, 1500); // don't block boot if voices never fire
+      setTimeout(resolve, 1500);
     }
   });
 }
 
-// ─── Camera ────────────────────────────────────────────────────
+// ── Camera ─────────────────────────────────────────────────────
 async function initCamera() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
@@ -483,47 +457,55 @@ async function initCamera() {
   } catch (_) {}
 }
 
-// ─── Wake lock ─────────────────────────────────────────────────
+// ── Wake lock ──────────────────────────────────────────────────
 async function initWakeLock() {
   try { await navigator.wakeLock.request('screen'); } catch (_) {}
 }
 
-// ─── Main RAF ──────────────────────────────────────────────────
+// ── Main RAF ───────────────────────────────────────────────────
 function frame(now) {
   if (!sessionStart) sessionStart = now;
   const elapsed = now - sessionStart;
 
-  // Progress hairline
   progressHead.style.width = Math.min(elapsed / SESSION_MS * 100, 100) + '%';
 
-  // Breathing (listening only — pulse has its own RAF)
   if (appState === 'listening') {
     const phase = (elapsed % CYCLE_MS) / CYCLE_MS * Math.PI * 2 - Math.PI / 2;
-    const t     = (Math.sin(phase) + 1) * 0.5;
+    const t = (Math.sin(phase) + 1) * 0.5;
     setSize(C_MIN + (C_MAX - C_MIN) * t);
   }
 
-  // Waveform bars (speaking only)
   if (appState === 'speaking') {
-    const t = now / 1000;
-    barEls.forEach((bar, i) => {
-      const a = (Math.sin(t * 4.8 + i * 1.05) + 1) * 0.5;
-      const b = (Math.cos(t * 7.1 + i * 2.20) + 1) * 0.5;
-      bar.style.height = (6 + (a * 0.62 + b * 0.38) * 42) + 'px';
-    });
+    if (analyserNode) {
+      // Real speech amplitude drives bars when ElevenLabs is active
+      if (!analyserBuf) analyserBuf = new Uint8Array(analyserNode.frequencyBinCount);
+      analyserNode.getByteFrequencyData(analyserBuf);
+      barEls.forEach((bar, i) => {
+        const idx = Math.floor(i * analyserBuf.length / barEls.length);
+        bar.style.height = (6 + (analyserBuf[idx] / 255) * 42) + 'px';
+      });
+    } else {
+      // Synthetic animation for Web Speech (no audio stream access)
+      const t = now / 1000;
+      barEls.forEach((bar, i) => {
+        const a = (Math.sin(t * 4.8 + i * 1.05) + 1) * 0.5;
+        const b = (Math.cos(t * 7.1 + i * 2.20) + 1) * 0.5;
+        bar.style.height = (6 + (a * 0.62 + b * 0.38) * 42) + 'px';
+      });
+    }
   }
 
   requestAnimationFrame(frame);
 }
 
-// ─── Motion detection ──────────────────────────────────────────
+// ── Motion detection ───────────────────────────────────────────
 const motionCanvas = document.createElement('canvas');
 motionCanvas.width  = MOTION_W;
 motionCanvas.height = MOTION_H;
 const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
 
 function sampleMotion() {
-  if (!cam.videoWidth || appState === 'speaking') return;
+  if (!cam.videoWidth || appState === 'speaking' || coachInFlight) return;
 
   motionCtx.drawImage(cam, 0, 0, MOTION_W, MOTION_H);
   const curr = motionCtx.getImageData(0, 0, MOTION_W, MOTION_H).data;
@@ -539,7 +521,6 @@ function sampleMotion() {
     }
     const score = changed / pixels;
 
-    // Rolling 2-second window (10fps × 20 samples)
     motionSamples.push(score);
     if (motionSamples.length > 20) motionSamples.shift();
 
@@ -552,9 +533,8 @@ function sampleMotion() {
       const sinceLast = now - lastUtteranceTime;
 
       if (sustained >= MOTION_SUSTAIN && sinceLast >= UTTERANCE_GAP) {
-        // Reset gates before the async call so rapid motion doesn't double-fire
-        lastUtteranceTime = now;
-        motionStartTime   = null;
+        motionStartTime = null;
+        coachInFlight   = true;
         triggerCoach(buildSnapshot());
       }
     } else {
@@ -565,7 +545,7 @@ function sampleMotion() {
   prevFrameData = curr;
 }
 
-// ─── Movement snapshot builder ────────────────────────────────
+// ── Movement snapshot → JSON ───────────────────────────────────
 function buildSnapshot() {
   const samples = motionSamples.slice();
   const avg = samples.reduce((s, v) => s + v, 0) / (samples.length || 1);
@@ -580,26 +560,31 @@ function buildSnapshot() {
   else                 intensity = 'subtle';
 
   let character;
-  if      (stdDev > 0.06) character = 'staccato bursts';
+  if      (stdDev > 0.06)  character = 'staccato bursts';
   else if (stdDev > 0.025) character = 'rhythmic and varied';
-  else                      character = 'flowing and continuous';
+  else                     character = 'flowing and continuous';
 
-  const seconds = Math.max(2, Math.round(samples.length / 10));
-
-  return `movement snapshot — ${intensity} full-body motion, ${character} quality, sustained for roughly ${seconds} seconds. motion score: ${(avg * 100).toFixed(1)}%.`;
+  return JSON.stringify({
+    intensity,
+    character,
+    durationSeconds: Math.max(2, Math.round(samples.length / 10)),
+    motionScore:     parseFloat((avg * 100).toFixed(1)),
+    song:            { title: SONG.track, bpm: BPM },
+    persona:         PERSONA_NAMES[persIdx],
+  });
 }
 
-// ─── Anthropic API call ───────────────────────────────────────
+// ── Anthropic API call ─────────────────────────────────────────
 async function queryCoach(snapshot) {
   if (!ANTHROPIC_KEY) return '';
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key':                            ANTHROPIC_KEY,
-        'anthropic-version':                    '2023-06-01',
+        'x-api-key':                                 ANTHROPIC_KEY,
+        'anthropic-version':                         '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type':                         'application/json',
+        'content-type':                              'application/json',
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-5',
@@ -616,60 +601,150 @@ async function queryCoach(snapshot) {
   }
 }
 
-// ─── Trigger: motion → coach utterance ───────────────────────
-async function triggerCoach(snapshot) {
-  if (appState !== 'listening') return;
-  const text = await queryCoach(snapshot);
-  if (text) {
-    toSpeaking(text);
-  }
-  // Empty string means silence is the right answer — do nothing
+// ── Pulse animation (promise-based) ───────────────────────────
+function doPulseAnimation() {
+  return new Promise(resolve => {
+    circleEl.classList.add('amber');
+    const startPx = parseFloat(circleEl.style.width) || C_MAX;
+    const t0 = performance.now();
+
+    function animatePulse(now) {
+      const dt = now - t0;
+      let size;
+      if (dt < 190) {
+        const p = 1 - Math.pow(1 - dt / 190, 3);
+        size = startPx + (C_PULSE - startPx) * p;
+      } else if (dt < 430) {
+        const p = Math.pow((dt - 190) / 240, 2);
+        size = C_PULSE + (C_MIN - C_PULSE) * p;
+      } else {
+        setSize(C_MIN);
+        resolve();
+        return;
+      }
+      setSize(size);
+      requestAnimationFrame(animatePulse);
+    }
+    requestAnimationFrame(animatePulse);
+  });
 }
 
-// ─── State: speaking ───────────────────────────────────────────
-function toSpeaking(text) {
+// ── ElevenLabs TTS + AnalyserNode ─────────────────────────────
+async function speakWithElevenLabs(text) {
+  try {
+    const resp = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE}`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key':   ELEVENLABS_KEY,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: {
+            stability:         0.80,
+            similarity_boost:  0.70,
+            style:             0.0,
+            use_speaker_boost: false,
+            speed:             0.82,
+          },
+        }),
+      }
+    );
+    if (!resp.ok) return false;
+
+    const arrayBuffer = await resp.arrayBuffer();
+    const decoded     = await audioCtx.decodeAudioData(arrayBuffer);
+
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize               = 256;
+    analyser.smoothingTimeConstant = 0.80;
+    analyserNode = analyser;
+    analyserBuf  = null;  // reset so frame() allocates fresh buffer
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(analyser);
+    analyser.connect(masterGain);
+    source.start();
+
+    return new Promise(resolve => {
+      const done = () => { analyserNode = null; resolve(true); };
+      source.onended = done;
+      setTimeout(done, decoded.duration * 1000 + 800);  // safety
+    });
+  } catch (_) {
+    return false;
+  }
+}
+
+// ── Web Speech API TTS (fallback) ─────────────────────────────
+function speakWithWebSpeech(text) {
+  return new Promise(resolve => {
+    const utt = new SpeechSynthesisUtterance(text);
+    if (selectedVoice) utt.voice = selectedVoice;
+    utt.rate   = 0.80;
+    utt.pitch  = 0.90;
+    utt.volume = 0.92;
+    let done = false;
+    const finish = () => { if (done) return; done = true; resolve(); };
+    utt.onend = finish;
+    setTimeout(finish, 5500);
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utt);
+  });
+}
+
+// ── State: speaking ───────────────────────────────────────────
+async function toSpeaking(text) {
   appState = 'speaking';
+
+  await doPulseAnimation();  // amber pulse before bars appear
+
   setSize(C_SPEAK);
   barsEl.classList.add('show');
   duckMusic();
 
-  const line = text || LINES[Math.floor(Math.random() * LINES.length)];
-  const utt = new SpeechSynthesisUtterance(line);
-  if (selectedVoice) utt.voice = selectedVoice;
-  utt.rate   = 0.80;  // deliberate — leaves space, less TTS-robotic
-  utt.pitch  = 0.90;  // grounded, not shrill
-  utt.volume = 0.92;
+  let spoke = false;
+  if (ELEVENLABS_KEY) spoke = await speakWithElevenLabs(text);
+  if (!spoke)         await speakWithWebSpeech(text);
 
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    toListening();
-  };
-
-  utt.onend = finish;
-  setTimeout(finish, 5500); // safety
-
-  speechSynthesis.cancel();
-  speechSynthesis.speak(utt);
+  toListening();
 }
 
-// ─── State: listening ──────────────────────────────────────────
+// ── State: listening ──────────────────────────────────────────
 function toListening() {
   appState = 'listening';
   circleEl.classList.remove('amber');
   barsEl.classList.remove('show');
   barEls.forEach(b => { b.style.height = '6px'; });
   unduckMusic();
-  // Next utterance is motion-triggered, not timer-based
 }
 
-// ─── End overlay ───────────────────────────────────────────────
+// ── Trigger: motion → API → utterance ─────────────────────────
+async function triggerCoach(snapshot) {
+  try {
+    if (appState !== 'listening') return;
+    const text = await queryCoach(snapshot);
+    if (text) {
+      lastUtteranceTime = Date.now();         // full 15s gap enforced after speech
+      await toSpeaking(text);
+    } else {
+      // Silence is the answer — allow retry sooner than the full gap
+      lastUtteranceTime = Date.now() - (UTTERANCE_GAP - EMPTY_RETRY_MS);
+    }
+  } finally {
+    coachInFlight = false;
+  }
+}
+
+// ── End overlay ───────────────────────────────────────────────
 function showEnd()    { endOverlay.classList.add('show'); }
 function dismissEnd() { endOverlay.classList.remove('show'); }
 function confirmEnd() { dismissEnd(); }
 
-// Long-press 1.5s → end overlay (no short taps do anything)
 phone.addEventListener('mousedown',  () => { longPressTimer = setTimeout(showEnd, 1500); });
 phone.addEventListener('mouseup',    () => clearTimeout(longPressTimer));
 phone.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
@@ -677,7 +752,7 @@ phone.addEventListener('touchstart', () => { longPressTimer = setTimeout(showEnd
 phone.addEventListener('touchend',   () => clearTimeout(longPressTimer));
 phone.addEventListener('touchmove',  () => clearTimeout(longPressTimer), { passive: true });
 
-// ─── Boot ──────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────
 const tapHint = document.getElementById('tapHint');
 let sessionStarted = false;
 
@@ -685,7 +760,7 @@ function startSession() {
   if (sessionStarted) return;
   sessionStarted = true;
 
-  // Prime speech synthesis inside the gesture (iOS WebKit requires this)
+  // Prime speech synthesis inside a user gesture (iOS WebKit requirement)
   const prime = new SpeechSynthesisUtterance(' ');
   prime.volume = 0;
   prime.rate   = 10;
@@ -693,13 +768,11 @@ function startSession() {
 
   initAudio();
 
-  // Hide hint
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
 
-  // Start motion sampler at 10fps — coach speaks when motion triggers it
-  lastUtteranceTime = Date.now();  // grace period: ignore first 15s
-  motionSamplerID = setInterval(sampleMotion, 100);
+  lastUtteranceTime = Date.now();  // 15s grace period before first utterance
+  setInterval(sampleMotion, 100);
 }
 
 async function boot() {
@@ -709,7 +782,6 @@ async function boot() {
 
   requestAnimationFrame(frame);
 
-  // Show tap hint after a beat
   setTimeout(() => tapHint.classList.add('show'), 800);
 
   document.addEventListener('click',      startSession, { once: true });
