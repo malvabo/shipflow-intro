@@ -12,6 +12,7 @@
     --bg: #0E0E10;
     --text-1: #F2EAD9;
     --accent: #C8874A;
+    --track: #5A9E70;
     --spring: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -26,7 +27,6 @@
     font-family: 'DM Sans', sans-serif;
   }
 
-  /* ── Phone shell ─────────────────────────────────────── */
   .phone {
     position: relative;
     width: 390px;
@@ -41,26 +41,20 @@
       0 48px 120px rgba(0,0,0,0.95);
     user-select: none;
     -webkit-user-select: none;
+    transition: background 1.4s ease;
   }
 
-  /* ── Full-screen on actual mobile ────────────────────── */
+  .phone.ended { background: #36363A; }
+
   @media (max-width: 500px) {
     html, body { background: var(--bg); }
-    .phone {
-      width: 100vw;
-      height: 100dvh;
-      border-radius: 0;
-      box-shadow: none;
-    }
+    .phone { width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none; }
   }
 
-  /* ── Camera PiP ──────────────────────────────────────── */
   .cam {
     position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 100px;
-    height: 140px;
+    top: 20px; right: 20px;
+    width: 100px; height: 140px;
     border-radius: 12px;
     object-fit: cover;
     opacity: 0.4;
@@ -69,14 +63,26 @@
     z-index: 5;
   }
 
-  /* ── Breathing circle ────────────────────────────────── */
+  .track-dot {
+    position: absolute;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--track);
+    box-shadow: 0 0 10px rgba(90,158,112,0.55);
+    pointer-events: none;
+    z-index: 8;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: left 0.12s ease, top 0.12s ease, opacity 0.4s ease;
+  }
+
+  .track-dot.active { opacity: 1; }
+
   .circle {
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    width: 140px;
-    height: 140px;
+    width: 140px; height: 140px;
     border-radius: 50%;
     background: rgba(255,255,255,0.08);
     border: 1.5px solid rgba(255,255,255,0.20);
@@ -92,7 +98,6 @@
     box-shadow: 0 0 32px rgba(200,135,74,0.14), inset 0 0 20px rgba(200,135,74,0.06);
   }
 
-  /* ── Waveform bars ───────────────────────────────────── */
   .bars {
     display: flex;
     align-items: center;
@@ -111,12 +116,9 @@
     will-change: height;
   }
 
-  /* ── Bottom track info + progress ────────────────────── */
   .bottom {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: 0; left: 0; right: 0;
   }
 
   .track-name {
@@ -139,15 +141,12 @@
 
   .progress-head {
     position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    width: 0%;
+    top: 0; left: 0;
+    height: 100%; width: 0%;
     background: rgba(255,255,255,0.52);
     transition: width 0.6s linear;
   }
 
-  /* ── End-session overlay ─────────────────────────────── */
   .end-overlay {
     position: absolute;
     inset: 0;
@@ -165,30 +164,7 @@
     z-index: 50;
   }
 
-  .end-overlay.show {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  /* ── Tap hint ────────────────────────────────────────── */
-  .tap-hint {
-    position: absolute;
-    bottom: 96px;
-    left: 0; right: 0;
-    text-align: center;
-    font-size: 12px;
-    font-weight: 300;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: rgba(242,234,217,0.25);
-    opacity: 0;
-    transition: opacity 0.8s ease;
-    pointer-events: none;
-    z-index: 10;
-  }
-
-  .tap-hint.show { opacity: 1; }
-  .tap-hint.hide { opacity: 0; }
+  .end-overlay.show { opacity: 1; pointer-events: auto; }
 
   .end-title {
     font-family: 'DM Serif Display', serif;
@@ -231,13 +207,36 @@
     -webkit-tap-highlight-color: transparent;
     letter-spacing: 0.02em;
   }
+
+  .tap-hint {
+    position: absolute;
+    bottom: 96px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(242,234,217,0.25);
+    opacity: 0;
+    transition: opacity 0.8s ease;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .tap-hint.show { opacity: 1; }
+  .tap-hint.hide { opacity: 0; }
 </style>
 </head>
 <body>
 
+<canvas id="motionCanvas" width="80" height="120" style="display:none"></canvas>
+
 <div class="phone" id="phone">
 
   <video class="cam" id="cam" autoplay muted playsinline></video>
+
+  <div class="track-dot" id="trackDot"></div>
 
   <div class="circle" id="circle">
     <div class="bars" id="bars">
@@ -262,7 +261,7 @@
   <div class="end-overlay" id="endOverlay">
     <div class="end-title">End session?</div>
     <div class="end-sub">Your practice is saved</div>
-    <button class="end-confirm" onclick="confirmEnd()">End session</button>
+    <button class="end-confirm" id="endBtn">End session</button>
     <div class="end-cancel" onclick="dismissEnd()">Keep going</div>
   </div>
 
@@ -270,12 +269,12 @@
 
 <script>
 // ── API keys — set on window before this script loads ──────────
-// window.ANTHROPIC_KEY      = 'sk-ant-...';
-// window.ELEVENLABS_KEY     = '...';       // optional; falls back to Web Speech
-// window.ELEVENLABS_VOICE_ID = '...';      // optional; defaults to Rachel
+// window.ANTHROPIC_KEY       = 'sk-ant-...';
+// window.ELEVENLABS_KEY      = '...';    // optional; falls back to Web Speech
+// window.ELEVENLABS_VOICE_ID = '...';    // optional; defaults to Rachel
 const ANTHROPIC_KEY    = window.ANTHROPIC_KEY    || '';
 const ELEVENLABS_KEY   = window.ELEVENLABS_KEY   || '';
-const ELEVENLABS_VOICE = window.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM'; // Rachel
+const ELEVENLABS_VOICE = window.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
 
 // ── Reflective coach system prompt ─────────────────────────────
 const COACH_SYSTEM_PROMPT = `You are a quiet, observant movement coach watching someone dance freely in their own space. You are not a fitness app. You are not enthusiastic. You speak rarely, only when you genuinely notice something worth naming. Your voice is warm, low, and intimate — the way a trusted friend might speak in a quiet room.
@@ -296,11 +295,11 @@ Constraints:
 - Speak mid-thought, not as a coach announcement
 - If the movement snapshot is unremarkable, return an empty string. Silence is a valid answer.`;
 
-// ── Song + persona from URL params ─────────────────────────────
+// ── Songs + persona ────────────────────────────────────────────
 const SONGS = [
-  { track: 'Essence · Wizkid ft. Tems',  bpm: 109 },
-  { track: 'Show Me Love · Robin S.',     bpm: 129 },
-  { track: 'Slow Motion · Trey Songz',   bpm: 72  },
+  { track: 'Essence · Wizkid ft. Tems', bpm: 109 },
+  { track: 'Show Me Love · Robin S.',   bpm: 129 },
+  { track: 'Slow Motion · Trey Songz',  bpm: 72  },
 ];
 const PERSONA_NAMES = ['calm collaborator', 'quiet observer', 'encouraging hype'];
 
@@ -317,30 +316,34 @@ const C_MAX      = 152;
 const C_PULSE    = 180;
 const C_SPEAK    = 160;
 const SESSION_MS = 5 * 60 * 1000;
+const GAP_MS     = 15000;  // min ms between utterances
+const RETRY_MS   = 5000;   // shorter gap after Claude returns empty
+const LOOP_MS    = 60000;  // subtle audio dip at 60s
+
+// Motion detection
+const M_W       = 80;
+const M_H       = 120;
+const M_THRESH  = 28;   // per-pixel rgb delta threshold
+const M_MIN_PIX = 25;   // min changed pixels to count as motion
 
 // ── State ──────────────────────────────────────────────────────
-let appState      = 'listening';   // 'listening' | 'speaking'
+let appState      = 'listening'; // 'listening' | 'speaking' | 'ended'
 let sessionStart  = null;
 let audioCtx      = null;
 let masterGain    = null;
-let longPressTimer = null;
 let selectedVoice = null;
-let analyserNode  = null;          // set during ElevenLabs playback for real amplitude
-let analyserBuf   = null;          // reusable Uint8Array for analyser reads
-
-// Motion detection state
-let prevFrameData    = null;
-let motionStartTime  = null;
-let lastUtteranceTime = 0;
-let motionSamples    = [];         // rolling 2s window at 10fps (max 20 items)
-let coachInFlight    = false;      // prevents concurrent API calls
-
-const MOTION_W         = 80;
-const MOTION_H         = 60;
-const MOTION_THRESHOLD = 0.035;   // 3.5% pixels changed = meaningful movement
-const MOTION_SUSTAIN   = 2000;    // ms of continuous motion before triggering
-const UTTERANCE_GAP    = 15000;   // ms minimum between utterances
-const EMPTY_RETRY_MS   = 5000;    // after silence response, allow retry after this ms
+let analyserNode  = null;
+let analyserBuf   = null;
+let sessionActive = false;
+let lastSpeakTime = 0;
+let coachInFlight = false;
+let prevFrameData = null;
+let dotTimeout    = null;
+let motionSamples = [];
+let musicLooped   = false;
+let wakeLock      = null;
+let rafActive     = true;
+let longPressTimer = null;
 
 // ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -351,6 +354,10 @@ const barEls       = [...barsEl.querySelectorAll('.bar')];
 const progressHead = document.getElementById('progressHead');
 const endOverlay   = document.getElementById('endOverlay');
 const trackNameEl  = document.getElementById('trackName');
+const trackDot     = document.getElementById('trackDot');
+const tapHint      = document.getElementById('tapHint');
+const motionCanvas = document.getElementById('motionCanvas');
+const mCtx         = motionCanvas.getContext('2d', { willReadFrequently: true });
 
 trackNameEl.textContent = SONG.track;
 
@@ -366,8 +373,9 @@ function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.42;
+  masterGain.gain.value = 0;
   masterGain.connect(audioCtx.destination);
+  masterGain.gain.setTargetAtTime(0.42, audioCtx.currentTime, 0.6); // fade in
 
   [[110, 0.06], [165, 0.04], [220, 0.028], [330, 0.015]].forEach(([freq, vol]) => {
     const osc  = audioCtx.createOscillator();
@@ -380,8 +388,9 @@ function initAudio() {
     osc.start();
   });
 
-  const gap = 60000 / BPM;
+  const beatMs = 60000 / BPM;
   function kick() {
+    if (!audioCtx) return;
     const t   = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const env = audioCtx.createGain();
@@ -396,14 +405,14 @@ function initAudio() {
     osc.stop(t + 0.20);
   }
   kick();
-  setInterval(kick, gap);
+  setInterval(kick, beatMs);
 }
 
 function duckMusic() {
   if (!masterGain) return;
   const t = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(t);
-  masterGain.gain.setTargetAtTime(0.42 * 0.30, t, 0.08);  // duck to 30%
+  masterGain.gain.setTargetAtTime(0.42 * 0.30, t, 0.08);
 }
 
 function unduckMusic() {
@@ -413,7 +422,16 @@ function unduckMusic() {
   masterGain.gain.setTargetAtTime(0.42, t, 0.35);
 }
 
-// ── Voice selection (Web Speech fallback) ──────────────────────
+function loopMusicCue() {
+  if (!masterGain || musicLooped) return;
+  musicLooped = true;
+  const t = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(t);
+  masterGain.gain.setTargetAtTime(0.05, t, 0.12);
+  masterGain.gain.setTargetAtTime(0.42, t + 0.65, 0.22);
+}
+
+// ── Voice selection ────────────────────────────────────────────
 const VOICE_PRIORITY = [
   'Samantha', 'Ava (Enhanced)', 'Allison (Enhanced)',
   'Google US English', 'Google UK English Female',
@@ -427,12 +445,10 @@ function pickVoice() {
     const v = voices.find(v => v.name.includes(name));
     if (v) return v;
   }
-  return (
-    voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced')) ||
-    voices.find(v => v.lang === 'en-US') ||
-    voices.find(v => v.lang.startsWith('en')) ||
-    null
-  );
+  return voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced'))
+      || voices.find(v => v.lang === 'en-US')
+      || voices.find(v => v.lang.startsWith('en'))
+      || null;
 }
 
 function loadVoices() {
@@ -459,11 +475,12 @@ async function initCamera() {
 
 // ── Wake lock ──────────────────────────────────────────────────
 async function initWakeLock() {
-  try { await navigator.wakeLock.request('screen'); } catch (_) {}
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
 }
 
 // ── Main RAF ───────────────────────────────────────────────────
 function frame(now) {
+  if (!rafActive) return;
   if (!sessionStart) sessionStart = now;
   const elapsed = now - sessionStart;
 
@@ -471,13 +488,11 @@ function frame(now) {
 
   if (appState === 'listening') {
     const phase = (elapsed % CYCLE_MS) / CYCLE_MS * Math.PI * 2 - Math.PI / 2;
-    const t = (Math.sin(phase) + 1) * 0.5;
-    setSize(C_MIN + (C_MAX - C_MIN) * t);
+    setSize(C_MIN + (C_MAX - C_MIN) * (Math.sin(phase) + 1) * 0.5);
   }
 
   if (appState === 'speaking') {
     if (analyserNode) {
-      // Real speech amplitude drives bars when ElevenLabs is active
       if (!analyserBuf) analyserBuf = new Uint8Array(analyserNode.frequencyBinCount);
       analyserNode.getByteFrequencyData(analyserBuf);
       barEls.forEach((bar, i) => {
@@ -485,7 +500,6 @@ function frame(now) {
         bar.style.height = (6 + (analyserBuf[idx] / 255) * 42) + 'px';
       });
     } else {
-      // Synthetic animation for Web Speech (no audio stream access)
       const t = now / 1000;
       barEls.forEach((bar, i) => {
         const a = (Math.sin(t * 4.8 + i * 1.05) + 1) * 0.5;
@@ -495,54 +509,55 @@ function frame(now) {
     }
   }
 
+  if (sessionActive && !musicLooped && elapsed >= LOOP_MS) loopMusicCue();
+
   requestAnimationFrame(frame);
 }
 
 // ── Motion detection ───────────────────────────────────────────
-const motionCanvas = document.createElement('canvas');
-motionCanvas.width  = MOTION_W;
-motionCanvas.height = MOTION_H;
-const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+function detectMotion() {
+  if (!cam.srcObject || cam.videoWidth === 0) return;
 
-function sampleMotion() {
-  if (!cam.videoWidth || appState === 'speaking' || coachInFlight) return;
+  mCtx.drawImage(cam, 0, 0, M_W, M_H);
+  const { data } = mCtx.getImageData(0, 0, M_W, M_H);
 
-  motionCtx.drawImage(cam, 0, 0, MOTION_W, MOTION_H);
-  const curr = motionCtx.getImageData(0, 0, MOTION_W, MOTION_H).data;
+  if (!prevFrameData) { prevFrameData = data.slice(); return; }
 
-  if (prevFrameData) {
-    let changed = 0;
-    const pixels = curr.length / 4;
-    for (let i = 0; i < curr.length; i += 4) {
-      const dr = Math.abs(curr[i]   - prevFrameData[i]);
-      const dg = Math.abs(curr[i+1] - prevFrameData[i+1]);
-      const db = Math.abs(curr[i+2] - prevFrameData[i+2]);
-      if (dr + dg + db > 40) changed++;
-    }
-    const score = changed / pixels;
+  let sumX = 0, sumY = 0, count = 0;
 
-    motionSamples.push(score);
-    if (motionSamples.length > 20) motionSamples.shift();
-
-    const now = Date.now();
-
-    if (score > MOTION_THRESHOLD) {
-      if (!motionStartTime) motionStartTime = now;
-
-      const sustained = now - motionStartTime;
-      const sinceLast = now - lastUtteranceTime;
-
-      if (sustained >= MOTION_SUSTAIN && sinceLast >= UTTERANCE_GAP) {
-        motionStartTime = null;
-        coachInFlight   = true;
-        triggerCoach(buildSnapshot());
-      }
-    } else {
-      motionStartTime = null;
+  for (let y = 0; y < M_H; y++) {
+    for (let x = 0; x < M_W; x++) {
+      const i = (y * M_W + x) * 4;
+      const diff = Math.abs(data[i]   - prevFrameData[i])
+                 + Math.abs(data[i+1] - prevFrameData[i+1])
+                 + Math.abs(data[i+2] - prevFrameData[i+2]);
+      if (diff > M_THRESH) { sumX += x; sumY += y; count++; }
     }
   }
 
-  prevFrameData = curr;
+  prevFrameData = data.slice();
+
+  const score = count / (M_W * M_H);
+  motionSamples.push(score);
+  if (motionSamples.length > 20) motionSamples.shift();
+
+  if (count < M_MIN_PIX) return;
+
+  // Green tracking dot — mirror x to match flipped video
+  const cx = (1 - sumX / count / M_W) * 350 + 20;
+  const cy = (sumY / count / M_H) * 760 + 42;
+  trackDot.style.left = cx + 'px';
+  trackDot.style.top  = cy + 'px';
+  trackDot.classList.add('active');
+  clearTimeout(dotTimeout);
+  dotTimeout = setTimeout(() => trackDot.classList.remove('active'), 900);
+
+  const now = Date.now();
+  if (sessionActive && appState === 'listening' && !coachInFlight
+      && (now - lastSpeakTime) >= GAP_MS) {
+    coachInFlight = true;
+    triggerCoach(buildSnapshot());
+  }
 }
 
 // ── Movement snapshot → JSON ───────────────────────────────────
@@ -601,6 +616,24 @@ async function queryCoach(snapshot) {
   }
 }
 
+// ── Trigger: motion → API → speak or stay silent ──────────────
+async function triggerCoach(snapshot) {
+  try {
+    if (appState !== 'listening') return;
+    const text = await queryCoach(snapshot);
+    if (text) {
+      lastSpeakTime = Date.now();
+      await toSpeaking(text);
+    } else {
+      // Claude chose silence — amber flash, retry sooner than the full gap
+      lastSpeakTime = Date.now() - (GAP_MS - RETRY_MS);
+      toSilence();
+    }
+  } finally {
+    coachInFlight = false;
+  }
+}
+
 // ── Pulse animation (promise-based) ───────────────────────────
 function doPulseAnimation() {
   return new Promise(resolve => {
@@ -612,11 +645,9 @@ function doPulseAnimation() {
       const dt = now - t0;
       let size;
       if (dt < 190) {
-        const p = 1 - Math.pow(1 - dt / 190, 3);
-        size = startPx + (C_PULSE - startPx) * p;
+        size = startPx + (C_PULSE - startPx) * (1 - Math.pow(1 - dt / 190, 3));
       } else if (dt < 430) {
-        const p = Math.pow((dt - 190) / 240, 2);
-        size = C_PULSE + (C_MIN - C_PULSE) * p;
+        size = C_PULSE + (C_MIN - C_PULSE) * Math.pow((dt - 190) / 240, 2);
       } else {
         setSize(C_MIN);
         resolve();
@@ -636,33 +667,24 @@ async function speakWithElevenLabs(text) {
       `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE}`,
       {
         method: 'POST',
-        headers: {
-          'xi-api-key':   ELEVENLABS_KEY,
-          'content-type': 'application/json',
-        },
+        headers: { 'xi-api-key': ELEVENLABS_KEY, 'content-type': 'application/json' },
         body: JSON.stringify({
           text,
           model_id: 'eleven_turbo_v2_5',
-          voice_settings: {
-            stability:         0.80,
-            similarity_boost:  0.70,
-            style:             0.0,
-            use_speaker_boost: false,
-            speed:             0.82,
-          },
+          voice_settings: { stability: 0.80, similarity_boost: 0.70,
+                            style: 0.0, use_speaker_boost: false, speed: 0.82 },
         }),
       }
     );
     if (!resp.ok) return false;
 
-    const arrayBuffer = await resp.arrayBuffer();
-    const decoded     = await audioCtx.decodeAudioData(arrayBuffer);
+    const decoded = await audioCtx.decodeAudioData(await resp.arrayBuffer());
 
     const analyser = audioCtx.createAnalyser();
-    analyser.fftSize               = 256;
+    analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.80;
     analyserNode = analyser;
-    analyserBuf  = null;  // reset so frame() allocates fresh buffer
+    analyserBuf  = null;
 
     const source = audioCtx.createBufferSource();
     source.buffer = decoded;
@@ -673,21 +695,17 @@ async function speakWithElevenLabs(text) {
     return new Promise(resolve => {
       const done = () => { analyserNode = null; resolve(true); };
       source.onended = done;
-      setTimeout(done, decoded.duration * 1000 + 800);  // safety
+      setTimeout(done, decoded.duration * 1000 + 800);
     });
-  } catch (_) {
-    return false;
-  }
+  } catch (_) { return false; }
 }
 
-// ── Web Speech API TTS (fallback) ─────────────────────────────
+// ── Web Speech API fallback ────────────────────────────────────
 function speakWithWebSpeech(text) {
   return new Promise(resolve => {
     const utt = new SpeechSynthesisUtterance(text);
     if (selectedVoice) utt.voice = selectedVoice;
-    utt.rate   = 0.80;
-    utt.pitch  = 0.90;
-    utt.volume = 0.92;
+    utt.rate = 0.80; utt.pitch = 0.90; utt.volume = 0.92;
     let done = false;
     const finish = () => { if (done) return; done = true; resolve(); };
     utt.onend = finish;
@@ -700,9 +718,7 @@ function speakWithWebSpeech(text) {
 // ── State: speaking ───────────────────────────────────────────
 async function toSpeaking(text) {
   appState = 'speaking';
-
-  await doPulseAnimation();  // amber pulse before bars appear
-
+  await doPulseAnimation();
   setSize(C_SPEAK);
   barsEl.classList.add('show');
   duckMusic();
@@ -714,6 +730,13 @@ async function toSpeaking(text) {
   toListening();
 }
 
+// ── State: silence — amber flash, no speech ───────────────────
+function toSilence() {
+  appState = 'speaking'; // block re-triggers during the pause
+  circleEl.classList.add('amber');
+  setTimeout(toListening, 1800);
+}
+
 // ── State: listening ──────────────────────────────────────────
 function toListening() {
   appState = 'listening';
@@ -723,27 +746,32 @@ function toListening() {
   unduckMusic();
 }
 
-// ── Trigger: motion → API → utterance ─────────────────────────
-async function triggerCoach(snapshot) {
-  try {
-    if (appState !== 'listening') return;
-    const text = await queryCoach(snapshot);
-    if (text) {
-      lastUtteranceTime = Date.now();         // full 15s gap enforced after speech
-      await toSpeaking(text);
-    } else {
-      // Silence is the answer — allow retry sooner than the full gap
-      lastUtteranceTime = Date.now() - (UTTERANCE_GAP - EMPTY_RETRY_MS);
-    }
-  } finally {
-    coachInFlight = false;
-  }
-}
-
-// ── End overlay ───────────────────────────────────────────────
+// ── End session ───────────────────────────────────────────────
 function showEnd()    { endOverlay.classList.add('show'); }
 function dismissEnd() { endOverlay.classList.remove('show'); }
-function confirmEnd() { dismissEnd(); }
+
+function confirmEnd() {
+  endOverlay.classList.remove('show');
+  sessionActive = false;
+  appState = 'ended';
+  rafActive = false;
+  phone.classList.add('ended');
+
+  speechSynthesis.cancel();
+  if (masterGain && audioCtx) {
+    const t = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(t);
+    masterGain.gain.setTargetAtTime(0, t, 0.35);
+    setTimeout(() => { try { audioCtx.close(); } catch (_) {} audioCtx = null; masterGain = null; }, 1800);
+  }
+  if (cam.srcObject) { cam.srcObject.getTracks().forEach(t => t.stop()); cam.srcObject = null; }
+  if (wakeLock)      { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+
+  setTimeout(() => { window.location.href = 'metoo.html'; }, 1500);
+}
+
+endOverlay.addEventListener('click', e => { if (e.target === endOverlay) dismissEnd(); });
+document.getElementById('endBtn').addEventListener('click', confirmEnd);
 
 phone.addEventListener('mousedown',  () => { longPressTimer = setTimeout(showEnd, 1500); });
 phone.addEventListener('mouseup',    () => clearTimeout(longPressTimer));
@@ -753,17 +781,14 @@ phone.addEventListener('touchend',   () => clearTimeout(longPressTimer));
 phone.addEventListener('touchmove',  () => clearTimeout(longPressTimer), { passive: true });
 
 // ── Boot ──────────────────────────────────────────────────────
-const tapHint = document.getElementById('tapHint');
 let sessionStarted = false;
 
 function startSession() {
   if (sessionStarted) return;
   sessionStarted = true;
 
-  // Prime speech synthesis inside a user gesture (iOS WebKit requirement)
   const prime = new SpeechSynthesisUtterance(' ');
-  prime.volume = 0;
-  prime.rate   = 10;
+  prime.volume = 0; prime.rate = 10;
   speechSynthesis.speak(prime);
 
   initAudio();
@@ -771,8 +796,8 @@ function startSession() {
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
 
-  lastUtteranceTime = Date.now();  // 15s grace period before first utterance
-  setInterval(sampleMotion, 100);
+  sessionActive = true;
+  lastSpeakTime = Date.now() - (GAP_MS - 6000); // first utterance possible after 6s
 }
 
 async function boot() {
@@ -781,6 +806,7 @@ async function boot() {
   try { await screen.orientation.lock('portrait'); } catch (_) {}
 
   requestAnimationFrame(frame);
+  setInterval(detectMotion, 100);
 
   setTimeout(() => tapHint.classList.add('show'), 800);
 
