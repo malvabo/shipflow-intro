@@ -304,8 +304,12 @@ const SONGS = [
 const PERSONA_NAMES = ['calm collaborator', 'quiet observer', 'encouraging hype'];
 
 const params  = new URLSearchParams(location.search);
-const songIdx = Math.min(Math.max(parseInt(params.get('song')    ?? '2', 10), 0), 2);
-const persIdx = Math.min(Math.max(parseInt(params.get('persona') ?? '0', 10), 0), 2);
+function paramIdx(name, def, max) {
+  const n = parseInt(params.get(name), 10);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), max) : def;
+}
+const songIdx = paramIdx('song',    2, SONGS.length - 1);
+const persIdx = paramIdx('persona', 0, PERSONA_LINES.length - 1);
 const SONG    = SONGS[songIdx];
 
 // ── Config ─────────────────────────────────────────────────────
@@ -440,7 +444,11 @@ const VOICE_PRIORITY = [
 ];
 
 function pickVoice() {
-  const voices = speechSynthesis.getVoices();
+  // Microsoft "Online" voices appear in getVoices() even with no network,
+  // but speak() produces no audio when offline — skip them in that case.
+  const offline = !navigator.onLine;
+  const voices = speechSynthesis.getVoices()
+    .filter(v => !offline || !v.name.includes('Online'));
   for (const name of VOICE_PRIORITY) {
     const v = voices.find(v => v.name.includes(name));
     if (v) return v;
@@ -709,9 +717,16 @@ function speakWithWebSpeech(text) {
     let done = false;
     const finish = () => { if (done) return; done = true; resolve(); };
     utt.onend = finish;
+    utt.onerror = e => {
+      console.warn('TTS failed:', e.error || e);
+      finish();
+    };
     setTimeout(finish, 5500);
+    // cancel() can leave Chromium paused, and same-tick speak() after cancel
+    // is silently dropped — defer one tick and resume defensively.
     speechSynthesis.cancel();
-    speechSynthesis.speak(utt);
+    speechSynthesis.resume();
+    setTimeout(() => speechSynthesis.speak(utt), 0);
   });
 }
 
@@ -787,11 +802,16 @@ function startSession() {
   if (sessionStarted) return;
   sessionStarted = true;
 
+  // Prime speech synthesis inside the gesture (iOS WebKit requires this).
+  // volume must be > 0 — iOS treats volume:0 as nothing-to-play and the
+  // engine never actually unlocks.
   const prime = new SpeechSynthesisUtterance(' ');
-  prime.volume = 0; prime.rate = 10;
+  prime.volume = 0.01; prime.rate = 10;
   speechSynthesis.speak(prime);
 
   initAudio();
+  // Wake-lock requires user activation on Safari — request it inside the gesture.
+  initWakeLock();
 
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
@@ -801,8 +821,12 @@ function startSession() {
 }
 
 async function boot() {
-  await Promise.all([initCamera(), loadVoices()]);
-  initWakeLock();
+  // Camera is fire-and-forget — a stalled permission prompt must not block
+  // tap-listener registration, otherwise the gesture that primes speech
+  // never reaches the page. Wake-lock moves into startSession (Safari
+  // requires user activation).
+  initCamera();
+  await loadVoices();
   try { await screen.orientation.lock('portrait'); } catch (_) {}
 
   requestAnimationFrame(frame);
