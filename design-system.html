@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Move together — Design system</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+
+    /* ─────────────────────────────────────────────────────────────
+       TOKENS
+    ───────────────────────────────────────────────────────────── */
+    :root {
+      /* Backgrounds */
+      --bg:               #1A130E;
+      --bg-deep:          #120D09;
+      --surface:          #221A13;
+      --surface-raised:   #2C2118;
+
+      /* Borders */
+      --border:           rgba(242, 234, 217, 0.07);
+      --border-subtle:    rgba(242, 234, 217, 0.04);
+
+      /* Text */
+      --text-1:           #F2EAD9;   /* primary — warm white */
+      --text-2:           #9B8B78;   /* secondary */
+      --text-3:           #5A4D41;   /* ghost / disabled */
+
+      /* Accent — amber, for AI states only */
+      --accent:           #C8874A;
+      --accent-dim:       rgba(200, 135, 74, 0.18);
+      --accent-glow:      rgba(200, 135, 74, 0.09);
+
+      /* Type */
+      --sans: 'DM Sans', system-ui, sans-serif;
+      --serif: 'DM Serif Display', Georgia, serif;
+
+      /* Scale */
+      --t-xs:   11px;
+      --t-sm:   13px;
+      --t-base: 16px;
+      --t-md:   20px;
+      --t-lg:   28px;
+      --t-xl:   42px;
+
+      /* Leading */
+      --lead-tight:  1.15;
+      --lead-snug:   1.35;
+      --lead-normal: 1.65;
+
+      /* Tracking */
+      --track-tight:  -0.022em;
+      --track-base:   -0.012em;
+      --track-wide:    0.04em;
+      --track-wider:   0.08em;
+
+      /* Weight */
+      --w-light:   300;
+      --w-regular: 400;
+      --w-medium:  500;
+
+      /* Space (4pt grid) */
+      --sp-1:  4px;
+      --sp-2:  8px;
+      --sp-3:  12px;
+      --sp-4:  16px;
+      --sp-5:  24px;
+      --sp-6:  32px;
+      --sp-7:  48px;
+      --sp-8:  64px;
+
+      /* Radius */
+      --r-sm:   8px;
+      --r-md:   16px;
+      --r-lg:   24px;
+      --r-full: 9999px;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       RESET + BASE
+    ───────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-deep);
+      font-family: var(--sans);
+      font-size: var(--t-base);
+      color: var(--text-1);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       DOC LAYOUT
+    ───────────────────────────────────────────────────────────── */
+    .doc {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 56px 28px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 52px;
+    }
+
+    .doc-header {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      padding-bottom: var(--sp-6);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .doc-eyebrow {
+      font-size: var(--t-xs);
+      font-weight: var(--w-medium);
+      letter-spacing: var(--track-wider);
+      color: var(--text-3);
+      text-transform: uppercase;
+    }
+
+    .doc-title {
+      font-family: var(--serif);
+      font-size: 36px;
+      font-weight: 400;
+      color: var(--text-1);
+      letter-spacing: var(--track-tight);
+      line-height: var(--lead-tight);
+    }
+
+    .doc-subtitle {
+      font-size: var(--t-sm);
+      color: var(--text-3);
+      letter-spacing: var(--track-base);
+      margin-top: 2px;
+    }
+
+    /* Section */
+    .section-label {
+      font-size: var(--t-xs);
+      font-weight: var(--w-medium);
+      letter-spacing: var(--track-wider);
+      color: var(--text-3);
+      text-transform: uppercase;
+      margin-bottom: var(--sp-4);
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       COLOR SWATCHES
+    ───────────────────────────────────────────────────────────── */
+    .swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+    }
+
+    .swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+
+    .swatch-chip {
+      width: 60px;
+      height: 60px;
+      border-radius: var(--r-md);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .swatch-name {
+      font-size: 10px;
+      color: var(--text-3);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       TYPE SCALE
+    ───────────────────────────────────────────────────────────── */
+    .type-table {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+
+    .type-row {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      align-items: baseline;
+      gap: var(--sp-4);
+      padding: var(--sp-4) var(--sp-5);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .type-row:last-child { border-bottom: none; }
+
+    .type-meta {
+      font-size: 10px;
+      font-weight: var(--w-medium);
+      letter-spacing: var(--track-wide);
+      color: var(--text-3);
+      text-transform: uppercase;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       BUTTON COMPONENT
+    ───────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--sp-2);
+      font-family: var(--sans);
+      font-size: var(--t-sm);
+      font-weight: var(--w-medium);
+      letter-spacing: var(--track-base);
+      border: none;
+      border-radius: var(--r-full);
+      cursor: pointer;
+      transition: opacity 160ms ease, transform 120ms ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover  { opacity: 0.82; }
+    .btn:active { opacity: 0.65; transform: scale(0.975); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #1A130E;
+      padding: 15px 30px;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-2);
+      border: 1px solid var(--border);
+      padding: 14px 30px;
+    }
+    .btn-ghost:hover {
+      background: var(--surface);
+      opacity: 1;
+    }
+
+    .btn-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--surface-raised);
+      color: var(--text-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-full);
+      font-size: 16px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       TILE COMPONENT
+    ───────────────────────────────────────────────────────────── */
+    .tile {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: var(--sp-5);
+    }
+
+    .tile-accent-state {
+      background: var(--accent-glow);
+      border-color: var(--accent-dim);
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       PULSE INDICATOR
+    ───────────────────────────────────────────────────────────── */
+
+    /* — Idle */
+    .pulse-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--sp-3);
+    }
+
+    .pulse {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pulse-core {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-3);
+      transition: background 500ms ease, box-shadow 500ms ease, width 300ms ease, height 300ms ease;
+      z-index: 1;
+    }
+
+    .pulse-ring {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0;
+    }
+
+    /* — Listening */
+    .pulse--listening .pulse-core {
+      background: var(--accent);
+      animation: breathe 2.4s ease-in-out infinite;
+    }
+
+    .pulse--listening .pulse-ring {
+      width: 36px;
+      height: 36px;
+      border: 1.5px solid var(--accent);
+      animation: ring-out 2.4s ease-out infinite;
+    }
+
+    /* — Speaking */
+    .pulse--speaking .pulse-core {
+      width: 16px;
+      height: 16px;
+      background: var(--accent);
+      box-shadow: 0 0 28px 6px var(--accent-dim);
+      animation: speak-beat 1.3s ease-in-out infinite alternate;
+    }
+
+    .pulse--speaking .pulse-ring {
+      width: 44px;
+      height: 44px;
+      border: 1px solid rgba(200, 135, 74, 0.28);
+      animation: ring-out 1.5s ease-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.18); }
+    }
+
+    @keyframes speak-beat {
+      0%   { transform: scale(1);    box-shadow: 0 0 20px 4px var(--accent-dim); }
+      100% { transform: scale(1.35); box-shadow: 0 0 44px 10px rgba(200, 135, 74, 0); }
+    }
+
+    @keyframes ring-out {
+      0%   { transform: scale(0.6); opacity: 0.7; }
+      100% { transform: scale(2.6); opacity: 0; }
+    }
+
+    .pulse-state-label {
+      font-size: var(--t-xs);
+      letter-spacing: var(--track-wide);
+      color: var(--text-3);
+    }
+
+    .pulse-state-label--active { color: var(--accent); }
+
+    /* ─────────────────────────────────────────────────────────────
+       COMPONENT PREVIEW SHELL
+    ───────────────────────────────────────────────────────────── */
+    .preview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: var(--sp-6);
+    }
+
+    .preview-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-4);
+      align-items: center;
+    }
+
+    .preview-col {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-3);
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       MOBILE FRAME
+    ───────────────────────────────────────────────────────────── */
+    .frame-wrap {
+      display: flex;
+      justify-content: center;
+    }
+
+    .phone {
+      width: 375px;
+      height: 812px;
+      background: var(--bg);
+      border-radius: 50px;
+      overflow: hidden;
+      position: relative;
+      border: 1.5px solid rgba(255,255,255,0.07);
+      box-shadow:
+        0 0 0 10px var(--bg-deep),
+        0 64px 140px rgba(0,0,0,0.75);
+      flex-shrink: 0;
+    }
+
+    .notch {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 126px;
+      height: 36px;
+      background: #0C0906;
+      border-radius: 0 0 20px 20px;
+      z-index: 20;
+    }
+
+    /* ─────────────────────────────────────────────────────────────
+       SAMPLE SCREEN LAYOUT
+    ───────────────────────────────────────────────────────────── */
+    .screen {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 56px 28px 44px;
+    }
+
+    /* Status bar */
+    .status {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--sp-7);
+    }
+
+    .status-time {
+      font-size: var(--t-sm);
+      font-weight: var(--w-medium);
+      color: var(--text-2);
+      letter-spacing: var(--track-base);
+    }
+
+    .status-pips {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .pip {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-3);
+    }
+
+    /* Header */
+    .screen-header {
+      margin-bottom: var(--sp-8);
+    }
+
+    .screen-eyebrow {
+      font-size: var(--t-xs);
+      letter-spacing: var(--track-wider);
+      color: var(--text-3);
+      margin-bottom: var(--sp-2);
+    }
+
+    .screen-title {
+      font-family: var(--serif);
+      font-size: 34px;
+      font-weight: 400;
+      color: var(--text-1);
+      line-height: var(--lead-tight);
+      letter-spacing: var(--track-tight);
+    }
+
+    /* Main area */
+    .screen-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--sp-7);
+    }
+
+    /* Ambient pulse — large, three rings */
+    .pulse-ambient {
+      position: relative;
+      width: 160px;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ambient-core {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 36px 8px var(--accent-dim);
+      animation: speak-beat 1.4s ease-in-out infinite alternate;
+      z-index: 2;
+    }
+
+    .ambient-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(200, 135, 74, 0.22);
+    }
+
+    .ar-1 { width: 60px;  height: 60px;  animation: ring-out 2.2s ease-out 0.0s infinite; }
+    .ar-2 { width: 60px;  height: 60px;  animation: ring-out 2.2s ease-out 0.7s infinite; }
+    .ar-3 { width: 60px;  height: 60px;  animation: ring-out 2.2s ease-out 1.4s infinite; }
+
+    /* Utterance */
+    .utterance {
+      text-align: center;
+      padding: 0 var(--sp-3);
+    }
+
+    .utterance-source {
+      font-size: var(--t-xs);
+      letter-spacing: var(--track-wider);
+      color: var(--accent);
+      margin-bottom: var(--sp-3);
+    }
+
+    .utterance-text {
+      font-size: var(--t-md);
+      font-weight: var(--w-light);
+      color: var(--text-1);
+      line-height: var(--lead-snug);
+      letter-spacing: var(--track-base);
+    }
+
+    /* Bottom controls */
+    .screen-controls {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-3);
+    }
+
+    .controls-row {
+      display: flex;
+      gap: var(--sp-3);
+      align-items: center;
+    }
+
+    .screen-end-btn {
+      flex: 1;
+      background: var(--surface);
+      color: var(--text-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-full);
+      padding: 16px;
+      font-family: var(--sans);
+      font-size: var(--t-sm);
+      font-weight: var(--w-medium);
+      letter-spacing: var(--track-base);
+      cursor: pointer;
+      transition: opacity 160ms ease;
+    }
+
+    .screen-pause-btn {
+      width: 52px;
+      height: 52px;
+      background: var(--surface-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--r-full);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .pause-bars {
+      display: flex;
+      gap: 4px;
+      height: 14px;
+    }
+
+    .pause-bar {
+      width: 3px;
+      background: var(--text-2);
+      border-radius: 2px;
+    }
+
+    .screen-hint {
+      text-align: center;
+      font-size: var(--t-xs);
+      color: var(--text-3);
+      letter-spacing: var(--track-wide);
+    }
+
+  </style>
+</head>
+<body>
+<div class="doc">
+
+  <!-- ── HEADER ── -->
+  <div class="doc-header">
+    <p class="doc-eyebrow">Design system · v0.1</p>
+    <h1 class="doc-title">Move together</h1>
+    <p class="doc-subtitle">Voice-first AI dance partner · Mobile foundation</p>
+  </div>
+
+
+  <!-- ── COLOR TOKENS ── -->
+  <div>
+    <p class="section-label">Color tokens</p>
+    <div class="swatches">
+
+      <div class="swatch">
+        <div class="swatch-chip" style="background:#1A130E;"></div>
+        <span class="swatch-name">bg<br>#1A130E</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-chip" style="background:#221A13;"></div>
+        <span class="swatch-name">surface<br>#221A13</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-chip" style="background:#2C2118;"></div>
+        <span class="swatch-name">surface+<br>#2C2118</span>
+      </div>
+
+      <div class="swatch" style="margin-left: 16px;">
+        <div class="swatch-chip" style="background:#F2EAD9;"></div>
+        <span class="swatch-name">text-1<br>#F2EAD9</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-chip" style="background:#9B8B78;"></div>
+        <span class="swatch-name">text-2<br>#9B8B78</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-chip" style="background:#5A4D41;"></div>
+        <span class="swatch-name">text-3<br>#5A4D41</span>
+      </div>
+
+      <div class="swatch" style="margin-left: 16px;">
+        <div class="swatch-chip" style="background:#C8874A; border-color: rgba(200,135,74,0.25);"></div>
+        <span class="swatch-name">accent<br>#C8874A</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-chip" style="background:rgba(200,135,74,0.18); border-color:rgba(200,135,74,0.15);"></div>
+        <span class="swatch-name">accent-dim<br>18% α</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-chip" style="background:rgba(200,135,74,0.09); border-color:rgba(200,135,74,0.09);"></div>
+        <span class="swatch-name">accent-glow<br>9% α</span>
+      </div>
+
+    </div>
+
+    <p style="font-size: var(--t-xs); color: var(--text-3); letter-spacing: var(--track-wide); margin-top: 20px;">
+      Amber is reserved for AI state only — do not use for navigation, selection, or any user-initiated action.
+    </p>
+  </div>
+
+
+  <!-- ── TYPE SCALE ── -->
+  <div>
+    <p class="section-label">Typography · DM Serif Display + DM Sans</p>
+    <div class="type-table">
+
+      <div class="type-row">
+        <span class="type-meta">XL · 42<br>serif 400</span>
+        <span style="font-family: var(--serif); font-size: 42px; font-weight: 400; letter-spacing: var(--track-tight); line-height: var(--lead-tight); color: var(--text-1);">Move together</span>
+      </div>
+
+      <div class="type-row">
+        <span class="type-meta">LG · 28<br>serif 400</span>
+        <span style="font-family: var(--serif); font-size: 28px; font-weight: 400; letter-spacing: var(--track-tight); color: var(--text-1);">Let the rhythm find you</span>
+      </div>
+
+      <div class="type-row">
+        <span class="type-meta">MD · 20<br>sans 300</span>
+        <span style="font-size: 20px; font-weight: var(--w-light); letter-spacing: var(--track-base); color: var(--text-1);">Feel that? Let it repeat</span>
+      </div>
+
+      <div class="type-row">
+        <span class="type-meta">Base · 16<br>sans 400</span>
+        <span style="font-size: 16px; font-weight: var(--w-regular); letter-spacing: var(--track-base); color: var(--text-2);">Your body already knows the answer</span>
+      </div>
+
+      <div class="type-row">
+        <span class="type-meta">SM · 13<br>sans 400</span>
+        <span style="font-size: 13px; font-weight: var(--w-regular); letter-spacing: var(--track-base); color: var(--text-2);">Session in progress</span>
+      </div>
+
+      <div class="type-row">
+        <span class="type-meta">XS · 11<br>sans 500</span>
+        <span style="font-size: 11px; font-weight: var(--w-medium); letter-spacing: var(--track-wider); color: var(--text-3); text-transform: uppercase;">AI is speaking</span>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ── BUTTONS ── -->
+  <div>
+    <p class="section-label">Component · Button</p>
+    <div class="preview">
+      <div class="preview-row">
+        <button class="btn btn-primary">Start session</button>
+        <button class="btn btn-ghost">Not now</button>
+        <button class="btn btn-icon" aria-label="Close">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      <p style="font-size: var(--t-xs); color: var(--text-3); letter-spacing: var(--track-wide); margin-top: var(--sp-5);">
+        Primary: amber · action the user initiates. Ghost: low-commitment options. Icon: secondary controls.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ── TILES ── -->
+  <div>
+    <p class="section-label">Component · Tile</p>
+    <div class="preview-col">
+
+      <div class="tile">
+        <p style="font-size: var(--t-xs); letter-spacing: var(--track-wider); color: var(--text-3); margin-bottom: var(--sp-2);">Last session</p>
+        <p style="font-size: var(--t-base); font-weight: var(--w-light); color: var(--text-1);">32 minutes · improvisation</p>
+      </div>
+
+      <div class="tile tile-accent-state">
+        <p style="font-size: var(--t-xs); letter-spacing: var(--track-wider); color: var(--accent); margin-bottom: var(--sp-2);">AI is speaking</p>
+        <p style="font-size: var(--t-base); font-weight: var(--w-light); color: var(--text-1); line-height: var(--lead-snug);">Try softening your shoulders on the next phrase</p>
+      </div>
+
+    </div>
+    <p style="font-size: var(--t-xs); color: var(--text-3); letter-spacing: var(--track-wide); margin-top: var(--sp-4);">
+      Tile accent state is the only context where amber background tint appears.
+    </p>
+  </div>
+
+
+  <!-- ── PULSE INDICATOR ── -->
+  <div>
+    <p class="section-label">Component · Pulse indicator</p>
+    <div class="preview">
+      <div class="preview-row" style="gap: var(--sp-8); justify-content: flex-start;">
+
+        <!-- Idle -->
+        <div class="pulse-wrap">
+          <div class="pulse">
+            <div class="pulse-core"></div>
+          </div>
+          <span class="pulse-state-label">Idle</span>
+        </div>
+
+        <!-- Listening -->
+        <div class="pulse-wrap">
+          <div class="pulse pulse--listening">
+            <div class="pulse-ring"></div>
+            <div class="pulse-core"></div>
+          </div>
+          <span class="pulse-state-label pulse-state-label--active">Listening</span>
+        </div>
+
+        <!-- Speaking -->
+        <div class="pulse-wrap">
+          <div class="pulse pulse--speaking">
+            <div class="pulse-ring"></div>
+            <div class="pulse-core"></div>
+          </div>
+          <span class="pulse-state-label pulse-state-label--active">Speaking</span>
+        </div>
+
+      </div>
+      <p style="font-size: var(--t-xs); color: var(--text-3); letter-spacing: var(--track-wide); margin-top: var(--sp-5);">
+        Idle: neutral dot. Listening: slow breath + single ring. Speaking: glowing beat + continuous rings. Amber color appears only in the two AI-active states.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ── SAMPLE SCREEN ── -->
+  <div>
+    <p class="section-label">Sample screen · Session · AI speaking</p>
+    <div class="frame-wrap">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+
+          <!-- Status -->
+          <div class="status">
+            <span class="status-time">9:41</span>
+            <div class="status-pips">
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+          </div>
+
+          <!-- Header -->
+          <div class="screen-header">
+            <p class="screen-eyebrow">In session</p>
+            <h1 class="screen-title">Move<br>together</h1>
+          </div>
+
+          <!-- Main: pulse + utterance -->
+          <div class="screen-main">
+
+            <div class="pulse-ambient">
+              <div class="ambient-ring ar-1"></div>
+              <div class="ambient-ring ar-2"></div>
+              <div class="ambient-ring ar-3"></div>
+              <div class="ambient-core"></div>
+            </div>
+
+            <div class="utterance">
+              <p class="utterance-source">AI is speaking</p>
+              <p class="utterance-text">Try softening your shoulders on the next phrase</p>
+            </div>
+
+          </div>
+
+          <!-- Controls -->
+          <div class="screen-controls">
+            <div class="controls-row">
+              <button class="screen-end-btn">End session</button>
+              <div class="screen-pause-btn" role="button" aria-label="Pause">
+                <div class="pause-bars">
+                  <div class="pause-bar"></div>
+                  <div class="pause-bar"></div>
+                </div>
+              </div>
+            </div>
+            <p class="screen-hint">Move freely — your partner is listening</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

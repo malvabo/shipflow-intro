@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@hyperframes/core/dist/hyperframe.runtime.iife.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@hyperframes/shader-transitions/dist/index.global.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,900&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #070d1a;
+        --ink: #e8edf5;
+        --accent: #38bdf8;
+        --green: #22c55e;
+        --muted: #7a93ae;
+        --card: #0d1829;
+        --border: #1a2d4a;
+        --font-display: "DM Sans", sans-serif;
+        --font-data: "IBM Plex Mono", monospace;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html, body {
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      .scene {
+        position: absolute; top: 0; left: 0;
+        width: 1920px; height: 1080px;
+        overflow: hidden;
+      }
+
+      .scene-content {
+        width: 100%; height: 100%;
+        padding: 80px 160px;
+        display: flex; flex-direction: column;
+        justify-content: center; gap: 24px;
+        box-sizing: border-box;
+        position: relative; z-index: 1;
+      }
+
+      .clip {}
+
+      .grain {
+        position: absolute; inset: 0;
+        pointer-events: none; z-index: 50; opacity: 0.15;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1.2px),
+          radial-gradient(rgba(0,0,0,0.18) 1px, transparent 1.2px);
+        background-size: 3px 3px, 5px 5px;
+        background-position: 0 0, 1px 2px;
+        mix-blend-mode: overlay;
+      }
+
+      .vignette {
+        position: absolute; inset: 0;
+        pointer-events: none; z-index: 49;
+        background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%);
+      }
+
+      /* =============================================
+         SCENE 1 — Voice command
+         Rings centered at (960, 490) — no CSS transform
+         so GSAP can animate freely without conflict
+      ============================================= */
+      #s1-glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse 700px 500px at 50% 45%, rgba(56,189,248,0.07) 0%, transparent 70%);
+      }
+      /* Ring outer  290×290 → top = 490-145=345, left = 960-145=815 */
+      #s1-ring-outer {
+        position: absolute;
+        width: 290px; height: 290px; border-radius: 50%;
+        border: 1.5px solid rgba(56,189,248,0.18);
+        top: 345px; left: 815px;
+      }
+      /* Ring mid    200×200 → top = 490-100=390, left = 960-100=860 */
+      #s1-ring-mid {
+        position: absolute;
+        width: 200px; height: 200px; border-radius: 50%;
+        border: 1.5px solid rgba(56,189,248,0.32);
+        top: 390px; left: 860px;
+      }
+      /* Ring inner  120×120 → top = 490-60=430, left = 960-60=900 */
+      #s1-ring-inner {
+        position: absolute;
+        width: 120px; height: 120px; border-radius: 50%;
+        border: 2px solid rgba(56,189,248,0.55);
+        background: rgba(56,189,248,0.04);
+        top: 430px; left: 900px;
+      }
+      /* Dot  20×20 → top = 490-10=480, left = 960-10=950 */
+      #s1-dot {
+        position: absolute;
+        width: 20px; height: 20px; border-radius: 50%;
+        background: #38bdf8;
+        box-shadow: 0 0 28px rgba(56,189,248,0.9);
+        top: 480px; left: 950px;
+      }
+      /* Full-width centered text — no CSS transform, safe for GSAP y-animation */
+      #s1-query {
+        position: absolute;
+        top: 650px; left: 0; width: 1920px;
+        text-align: center;
+        font-family: var(--font-data);
+        font-size: 42px; color: var(--accent);
+        letter-spacing: 0.02em;
+      }
+      #s1-cursor {
+        display: inline-block;
+        width: 3px; height: 36px;
+        background: var(--accent);
+        margin-left: 4px;
+        vertical-align: middle;
+      }
+      #s1-label {
+        position: absolute;
+        top: 760px; left: 0; width: 1920px;
+        text-align: center;
+        font-family: var(--font-display);
+        font-size: 30px; font-weight: 300;
+        color: var(--muted);
+        letter-spacing: 0.18em; text-transform: uppercase;
+      }
+
+      /* =============================================
+         SCENE 2 — Node graph
+      ============================================= */
+      #s2-glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse 1000px 650px at 50% 50%, rgba(56,189,248,0.04) 0%, transparent 70%);
+      }
+      #s2-svg {
+        position: absolute; top: 0; left: 0;
+        width: 1920px; height: 1080px;
+      }
+      #s2-label {
+        position: absolute;
+        top: 56px; left: 160px;
+        font-family: var(--font-data);
+        font-size: 20px; color: var(--muted);
+        letter-spacing: 0.12em; text-transform: uppercase;
+      }
+      #s2-status {
+        position: absolute;
+        top: 56px; right: 160px;
+        font-family: var(--font-data);
+        font-size: 20px; color: var(--accent);
+        letter-spacing: 0.08em;
+      }
+
+      /* =============================================
+         SCENE 3 — Carrier evaluation (shader anchor)
+      ============================================= */
+      #s3-glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse 1100px 600px at 28% 50%, rgba(56,189,248,0.04) 0%, transparent 60%);
+      }
+      #s3-eyebrow {
+        font-family: var(--font-data);
+        font-size: 18px; color: var(--muted);
+        letter-spacing: 0.14em; text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+      #s3-title {
+        font-family: var(--font-display);
+        font-weight: 900; font-size: 68px;
+        color: var(--ink); line-height: 1;
+        margin-bottom: 44px;
+      }
+      .c-row {
+        display: flex; align-items: center; gap: 28px;
+        padding: 22px 32px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card);
+        margin-bottom: 14px;
+        width: 860px;
+      }
+      .c-row.best {
+        border-color: rgba(34,197,94,0.45);
+        background: rgba(34,197,94,0.04);
+      }
+      .c-name {
+        font-family: var(--font-display);
+        font-weight: 900; font-size: 26px;
+        width: 140px; flex-shrink: 0;
+      }
+      .c-bar-bg {
+        flex: 1; height: 7px; border-radius: 4px;
+        background: rgba(255,255,255,0.06); overflow: hidden;
+      }
+      .c-bar-fill {
+        height: 100%; width: 0%; border-radius: 4px;
+      }
+      .c-score {
+        font-family: var(--font-data);
+        font-size: 20px; color: var(--ink);
+        width: 48px; text-align: right; flex-shrink: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .c-rate {
+        font-family: var(--font-data);
+        font-size: 20px; width: 84px; text-align: right;
+        color: var(--muted); flex-shrink: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      #s3-badge {
+        font-family: var(--font-data);
+        font-size: 16px; color: var(--green);
+        letter-spacing: 0.1em; text-transform: uppercase;
+        padding: 5px 14px;
+        border: 1px solid rgba(34,197,94,0.4);
+        border-radius: 20px;
+        background: rgba(34,197,94,0.08);
+        white-space: nowrap; flex-shrink: 0;
+      }
+      #s3-factors {
+        position: absolute;
+        right: 160px; top: 50%;
+        transform: translateY(-50%);
+        display: flex; flex-direction: column; gap: 20px;
+      }
+      .factor-chip {
+        font-family: var(--font-data);
+        font-size: 24px; color: var(--muted);
+        letter-spacing: 0.08em; text-transform: uppercase;
+        padding: 14px 28px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--card);
+        white-space: nowrap;
+      }
+      .factor-chip span {
+        color: var(--accent); margin-left: 16px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* =============================================
+         SCENE 4 — Analytics answer (shader anchor)
+      ============================================= */
+      #s4-glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse 1400px 800px at 35% 50%, rgba(34,197,94,0.05) 0%, transparent 60%);
+      }
+      #s4-rec-label {
+        font-family: var(--font-data);
+        font-size: 18px; color: var(--green);
+        letter-spacing: 0.16em; text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+      #s4-carrier {
+        font-family: var(--font-display);
+        font-weight: 900; font-size: 104px;
+        color: var(--ink); line-height: 1; margin-bottom: 6px;
+      }
+      #s4-service {
+        font-family: var(--font-data);
+        font-size: 22px; color: var(--accent); margin-bottom: 44px;
+      }
+      #s4-sav-lbl {
+        font-family: var(--font-data);
+        font-size: 18px; color: var(--muted);
+        letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 6px;
+      }
+      #s4-sav-val {
+        font-family: var(--font-display);
+        font-weight: 900; font-size: 60px;
+        color: var(--green); font-variant-numeric: tabular-nums; line-height: 1;
+      }
+      #s4-chart {
+        position: absolute;
+        right: 160px; top: 50%;
+        transform: translateY(-50%);
+        width: 580px;
+      }
+      #s4-chart-lbl {
+        font-family: var(--font-data);
+        font-size: 18px; color: var(--muted);
+        letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 20px;
+      }
+      .chart-bars {
+        display: flex; align-items: flex-end; gap: 22px; height: 300px;
+      }
+      .cb-wrap {
+        display: flex; flex-direction: column; align-items: center; gap: 10px; flex: 1;
+      }
+      .cb {
+        width: 100%; border-radius: 6px 6px 0 0;
+        transform-origin: bottom; transform: scaleY(0);
+      }
+      .cb-lbl {
+        font-family: var(--font-data);
+        font-size: 18px; color: var(--muted);
+        text-align: center; line-height: 1.5;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* =============================================
+         SCENE 5 — Close
+      ============================================= */
+      #s5-glow {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse 900px 650px at 50% 50%, rgba(56,189,248,0.08) 0%, transparent 65%);
+      }
+      #s5-logo {
+        font-family: var(--font-display);
+        font-weight: 900; font-size: 118px;
+        letter-spacing: -0.02em;
+        background: linear-gradient(130deg, #e8edf5 0%, #38bdf8 60%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        line-height: 1; text-align: center;
+      }
+      #s5-rule {
+        width: 0; height: 2px;
+        background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        margin: 0 auto;
+      }
+      #s5-tagline {
+        font-family: var(--font-display);
+        font-weight: 300; font-size: 34px;
+        color: var(--muted); text-align: center; letter-spacing: 0.06em;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="main"
+      data-composition-id="main"
+      data-width="1920"
+      data-height="1080"
+      data-start="0"
+      data-duration="22"
+    >
+
+      <!-- SCENE 1 · Voice command (0–2s) -->
+      <div class="scene clip" id="s1" data-start="0" data-duration="4" data-track-index="0">
+        <div class="grain"></div>
+        <div class="vignette"></div>
+        <div id="s1-glow"></div>
+        <div id="s1-ring-outer"></div>
+        <div id="s1-ring-mid"></div>
+        <div id="s1-ring-inner"></div>
+        <div id="s1-dot"></div>
+<div id="s1-query"><span id="s1-qt"></span><span id="s1-cursor">|</span></div>
+        <div id="s1-label">Shipping Intelligence Engine</div>
+        <div class="scene-content"></div>
+      </div>
+
+      <!-- SCENE 2 · Node graph (4–10s) -->
+      <div class="scene clip" id="s2" data-start="4" data-duration="6" data-track-index="0" style="visibility:hidden;">
+        <div class="grain"></div>
+        <div class="vignette"></div>
+        <div id="s2-glow"></div>
+        <div id="s2-label">Analyzing factors</div>
+        <div id="s2-status">Routing engine active</div>
+        <svg id="s2-svg" viewBox="0 0 1920 1080">
+
+          <!-- ── Input → Engine lines ── -->
+          <!-- top/bottom ≈590, mid-diag ≈498, horizontal =460 -->
+          <line id="li-1" x1="340" y1="158" x2="800" y2="518" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="590" stroke-dashoffset="590" opacity="0.32"/>
+          <line id="li-2" x1="340" y1="338" x2="800" y2="518" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="498" stroke-dashoffset="498" opacity="0.32"/>
+          <line id="li-3" x1="340" y1="518" x2="800" y2="518" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="460" stroke-dashoffset="460" opacity="0.32"/>
+          <line id="li-4" x1="340" y1="698" x2="800" y2="518" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="498" stroke-dashoffset="498" opacity="0.32"/>
+          <line id="li-5" x1="340" y1="878" x2="800" y2="518" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="590" stroke-dashoffset="590" opacity="0.32"/>
+
+          <!-- ── Engine → Output category lines ── -->
+          <!-- diag ≈524, horizontal =450 -->
+          <line id="lo-1" x1="800" y1="518" x2="1250" y2="258" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="524" stroke-dashoffset="524" opacity="0.38"/>
+          <line id="lo-2" x1="800" y1="518" x2="1250" y2="518" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="450" stroke-dashoffset="450" opacity="0.38"/>
+          <line id="lo-3" x1="800" y1="518" x2="1250" y2="778" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="524" stroke-dashoffset="524" opacity="0.38"/>
+
+          <!-- ── Output → Carrier option lines ── -->
+          <!-- dx=260, dy=80 → ≈272 -->
+          <line id="lc-s1" x1="1250" y1="258" x2="1510" y2="178" stroke="#22c55e"              stroke-width="1.5" stroke-dasharray="272" stroke-dashoffset="272" opacity="0.55"/>
+          <line id="lc-s2" x1="1250" y1="258" x2="1510" y2="338" stroke="rgba(56,189,248,0.55)" stroke-width="1.5" stroke-dasharray="272" stroke-dashoffset="272" opacity="1"/>
+          <line id="lc-r1" x1="1250" y1="518" x2="1510" y2="438" stroke="#22c55e"              stroke-width="1.5" stroke-dasharray="272" stroke-dashoffset="272" opacity="0.55"/>
+          <line id="lc-r2" x1="1250" y1="518" x2="1510" y2="598" stroke="rgba(56,189,248,0.55)" stroke-width="1.5" stroke-dasharray="272" stroke-dashoffset="272" opacity="1"/>
+          <line id="lc-c1" x1="1250" y1="778" x2="1510" y2="698" stroke="rgba(56,189,248,0.55)" stroke-width="1.5" stroke-dasharray="272" stroke-dashoffset="272" opacity="1"/>
+          <line id="lc-c2" x1="1250" y1="778" x2="1510" y2="858" stroke="rgba(56,189,248,0.55)" stroke-width="1.5" stroke-dasharray="272" stroke-dashoffset="272" opacity="1"/>
+
+          <!-- ── Engine hub — rounded rect 250×104 ── -->
+          <rect id="ne" x="675" y="466" width="250" height="104" rx="18" fill="#0c1e2e" stroke="#38bdf8" stroke-width="2.5" opacity="0"/>
+          <text id="ne-t1" x="800" y="505" text-anchor="middle" fill="#38bdf8" font-family="IBM Plex Mono" font-size="28" font-weight="600" opacity="0">ROUTE</text>
+          <text id="ne-t2" x="800" y="537" text-anchor="middle" fill="#38bdf8" font-family="IBM Plex Mono" font-size="28" font-weight="600" opacity="0">ENGINE</text>
+
+          <!-- ── Input nodes — rounded rect 220×94 ── -->
+          <rect id="ni-1" x="230" y="111" width="220" height="94" rx="16" fill="#0d1829" stroke="rgba(56,189,248,0.65)" stroke-width="2" opacity="0"/>
+          <text id="ni-1a" x="340" y="145" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="26" opacity="0">WEIGHT</text>
+          <text id="ni-1b" x="340" y="174" text-anchor="middle" fill="#7a93ae"  font-family="IBM Plex Mono" font-size="22" opacity="0">3.2 lbs</text>
+
+          <rect id="ni-2" x="230" y="291" width="220" height="94" rx="16" fill="#0d1829" stroke="rgba(56,189,248,0.65)" stroke-width="2" opacity="0"/>
+          <text id="ni-2a" x="340" y="325" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="26" opacity="0">ROUTE</text>
+          <text id="ni-2b" x="340" y="354" text-anchor="middle" fill="#7a93ae"  font-family="IBM Plex Mono" font-size="22" opacity="0">CHI→NYC</text>
+
+          <rect id="ni-3" x="230" y="471" width="220" height="94" rx="16" fill="#0d1829" stroke="rgba(56,189,248,0.65)" stroke-width="2" opacity="0"/>
+          <text id="ni-3a" x="340" y="505" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="26" opacity="0">DELIVERY</text>
+          <text id="ni-3b" x="340" y="534" text-anchor="middle" fill="#7a93ae"  font-family="IBM Plex Mono" font-size="22" opacity="0">2-day req.</text>
+
+          <rect id="ni-4" x="230" y="651" width="220" height="94" rx="16" fill="#0d1829" stroke="rgba(56,189,248,0.65)" stroke-width="2" opacity="0"/>
+          <text id="ni-4a" x="340" y="685" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="26" opacity="0">VOLUME</text>
+          <text id="ni-4b" x="340" y="714" text-anchor="middle" fill="#7a93ae"  font-family="IBM Plex Mono" font-size="22" opacity="0">3 pkgs</text>
+
+          <rect id="ni-5" x="230" y="831" width="220" height="94" rx="16" fill="#0d1829" stroke="rgba(56,189,248,0.65)" stroke-width="2" opacity="0"/>
+          <text id="ni-5a" x="340" y="865" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="26" opacity="0">COST</text>
+          <text id="ni-5b" x="340" y="894" text-anchor="middle" fill="#7a93ae"  font-family="IBM Plex Mono" font-size="22" opacity="0">minimize</text>
+
+          <!-- ── Output category nodes — rounded rect 220×94 ── -->
+          <rect id="no-1" x="1140" y="211" width="220" height="94" rx="16" fill="#0d1829" stroke="#38bdf8" stroke-width="2" opacity="0"/>
+          <text id="no-1t" x="1250" y="267" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="28" font-weight="600" opacity="0">SPEED</text>
+
+          <rect id="no-2" x="1140" y="471" width="220" height="94" rx="16" fill="#0d1829" stroke="#38bdf8" stroke-width="2" opacity="0"/>
+          <text id="no-2t" x="1250" y="505" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="28" font-weight="600" opacity="0">RELIAB.</text>
+          <text id="no-2v" x="1250" y="534" text-anchor="middle" fill="#7a93ae"  font-family="IBM Plex Mono" font-size="22" opacity="0">99.1% SLA</text>
+
+          <rect id="no-3" x="1140" y="731" width="220" height="94" rx="16" fill="#0d1829" stroke="#38bdf8" stroke-width="2" opacity="0"/>
+          <text id="no-3t" x="1250" y="787" text-anchor="middle" fill="#e8edf5" font-family="IBM Plex Mono" font-size="28" font-weight="600" opacity="0">COST</text>
+
+          <!-- ── Carrier option nodes — rounded rect 180×76 ── -->
+          <!-- Speed: FedEx / UPS -->
+          <rect id="nc-s1" x="1420" y="140" width="180" height="76" rx="13" fill="#091a0c" stroke="#22c55e"              stroke-width="2.5" opacity="0"/>
+          <text id="nc-s1t" x="1510" y="187" text-anchor="middle" fill="#22c55e" font-family="DM Sans" font-weight="900" font-size="26" opacity="0">FedEx</text>
+          <rect id="nc-s2" x="1420" y="300" width="180" height="76" rx="13" fill="#0d1829" stroke="rgba(56,189,248,0.5)" stroke-width="2" opacity="0"/>
+          <text id="nc-s2t" x="1510" y="347" text-anchor="middle" fill="#e8edf5" font-family="DM Sans" font-weight="900" font-size="26" opacity="0">UPS</text>
+
+          <!-- Reliability: FedEx / USPS -->
+          <rect id="nc-r1" x="1420" y="400" width="180" height="76" rx="13" fill="#091a0c" stroke="#22c55e"              stroke-width="2.5" opacity="0"/>
+          <text id="nc-r1t" x="1510" y="447" text-anchor="middle" fill="#22c55e" font-family="DM Sans" font-weight="900" font-size="26" opacity="0">FedEx</text>
+          <rect id="nc-r2" x="1420" y="560" width="180" height="76" rx="13" fill="#0d1829" stroke="rgba(56,189,248,0.5)" stroke-width="2" opacity="0"/>
+          <text id="nc-r2t" x="1510" y="607" text-anchor="middle" fill="#e8edf5" font-family="DM Sans" font-weight="900" font-size="26" opacity="0">USPS</text>
+
+          <!-- Cost: USPS / DHL -->
+          <rect id="nc-c1" x="1420" y="660" width="180" height="76" rx="13" fill="#0d1829" stroke="rgba(56,189,248,0.5)" stroke-width="2" opacity="0"/>
+          <text id="nc-c1t" x="1510" y="707" text-anchor="middle" fill="#e8edf5" font-family="DM Sans" font-weight="900" font-size="26" opacity="0">USPS</text>
+          <rect id="nc-c2" x="1420" y="820" width="180" height="76" rx="13" fill="#0d1829" stroke="rgba(56,189,248,0.5)" stroke-width="2" opacity="0"/>
+          <text id="nc-c2t" x="1510" y="867" text-anchor="middle" fill="#e8edf5" font-family="DM Sans" font-weight="900" font-size="26" opacity="0">DHL</text>
+        </svg>
+        <div class="scene-content"></div>
+      </div>
+
+      <!-- SCENE 3 · Carrier evaluation — SHADER ANCHOR (10–15s) -->
+      <div class="scene clip" id="s3" data-start="10" data-duration="5" data-track-index="0" style="opacity:0;">
+        <div class="grain"></div>
+        <div class="vignette"></div>
+        <div id="s3-glow"></div>
+        <div class="scene-content">
+          <div id="s3-eyebrow">Carrier Selection · CHI → NYC · 3 packages</div>
+          <div id="s3-title">Evaluating carriers</div>
+          <div id="s3-row1" class="c-row best">
+            <div class="c-name" style="color:#22c55e;">FedEx</div>
+            <div class="c-bar-bg"><div class="c-bar-fill" id="bar-fedex" style="background:#22c55e;"></div></div>
+            <div class="c-score" style="color:#22c55e;">96</div>
+            <div class="c-rate">$18.40</div>
+            <div id="s3-badge">✓ OPTIMAL</div>
+          </div>
+          <div id="s3-row2" class="c-row">
+            <div class="c-name">UPS</div>
+            <div class="c-bar-bg"><div class="c-bar-fill" id="bar-ups" style="background:#38bdf8;"></div></div>
+            <div class="c-score">84</div>
+            <div class="c-rate">$21.20</div>
+          </div>
+          <div id="s3-row3" class="c-row">
+            <div class="c-name">USPS</div>
+            <div class="c-bar-bg"><div class="c-bar-fill" id="bar-usps" style="background:#38bdf8;"></div></div>
+            <div class="c-score">71</div>
+            <div class="c-rate">$16.80</div>
+          </div>
+          <div id="s3-row4" class="c-row">
+            <div class="c-name">DHL</div>
+            <div class="c-bar-bg"><div class="c-bar-fill" id="bar-dhl" style="background:#38bdf8;"></div></div>
+            <div class="c-score">68</div>
+            <div class="c-rate">$24.60</div>
+          </div>
+        </div>
+        <div id="s3-factors">
+          <div class="factor-chip" id="fc1">Weight<span>3.2 lbs</span></div>
+          <div class="factor-chip" id="fc2">Route<span>CHI → NYC</span></div>
+          <div class="factor-chip" id="fc3">Speed<span>2-day</span></div>
+          <div class="factor-chip" id="fc4">Reliability<span>99.1%</span></div>
+          <div class="factor-chip" id="fc5">Cost target<span>minimize</span></div>
+        </div>
+      </div>
+
+      <!-- SCENE 4 · Analytics answer — SHADER ANCHOR (6.5–9s) -->
+      <div class="scene clip" id="s4" data-start="15" data-duration="5" data-track-index="0" style="opacity:0;">
+        <div class="grain"></div>
+        <div class="vignette"></div>
+        <div id="s4-glow"></div>
+        <div class="scene-content" style="flex-direction:row; align-items:center; gap:0;">
+          <div style="flex:1; display:flex; flex-direction:column; gap:0;">
+            <div id="s4-rec-label">Recommended Carrier</div>
+            <div id="s4-carrier">FedEx</div>
+            <div id="s4-service">Ground · 2-day guaranteed</div>
+            <div id="s4-sav-lbl">Savings vs. avg. selection</div>
+            <div id="s4-sav-val">$0.00</div>
+          </div>
+        </div>
+        <div id="s4-chart">
+          <div id="s4-chart-lbl">Cost comparison / shipment</div>
+          <div class="chart-bars">
+            <div class="cb-wrap">
+              <div class="cb" id="cb1" style="height:185px; background:#22c55e;"></div>
+              <div class="cb-lbl" style="color:#22c55e;">FedEx<br/>$18.40</div>
+            </div>
+            <div class="cb-wrap">
+              <div class="cb" id="cb2" style="height:218px; background:#38bdf8;"></div>
+              <div class="cb-lbl">UPS<br/>$21.20</div>
+            </div>
+            <div class="cb-wrap">
+              <div class="cb" id="cb3" style="height:172px; background:rgba(56,189,248,0.5);"></div>
+              <div class="cb-lbl">USPS<br/>$16.80</div>
+            </div>
+            <div class="cb-wrap">
+              <div class="cb" id="cb4" style="height:253px; background:rgba(56,189,248,0.35);"></div>
+              <div class="cb-lbl">DHL<br/>$24.60</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE 5 · Close (20–22s) -->
+      <div class="scene clip" id="s5" data-start="20" data-duration="2" data-track-index="0" style="visibility:hidden;">
+        <div class="grain"></div>
+        <div class="vignette"></div>
+        <div id="s5-glow"></div>
+        <div class="scene-content" style="align-items:center; justify-content:center; gap:22px;">
+          <div id="s5-rule"></div>
+          <div id="s5-logo">ShipFlow</div>
+          <div id="s5-tagline">Intelligent carrier selection, automated.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      var tl = gsap.timeline({ paused: true });
+
+      // ─── Visibility toggles ───────────────────────────────────────
+      tl.set("#s1", { autoAlpha: 0 }, 4.0);
+      tl.set("#s2", { autoAlpha: 1 }, 4.0);
+      tl.set("#s2", { autoAlpha: 0 }, 10.0);
+      tl.set("#s3", { opacity: 1 }, 10.0);  // first shader anchor must be shown explicitly
+      // s3, s4 are HyperShader-managed
+      tl.set("#s5", { autoAlpha: 1 }, 20.0);
+
+      // ─── SCENE 1 (0–4s) — Voice command ──────────────────────────
+      tl.from("#s1-ring-outer", { autoAlpha: 0, duration: 1.0,  ease: "power3.out" }, 0.2);
+      tl.from("#s1-ring-mid",   { autoAlpha: 0, duration: 0.84, ease: "expo.out"   }, 0.36);
+      tl.from("#s1-ring-inner", { autoAlpha: 0, duration: 0.76, ease: "expo.out"   }, 0.52);
+      tl.from("#s1-dot",        { autoAlpha: 0, scale: 0, duration: 0.6, ease: "back.out(2.5)", transformOrigin: "50% 50%" }, 0.72);
+
+      // Ring outer glow pulse
+      tl.to("#s1-ring-outer", { opacity: 0.55, duration: 0.9, ease: "sine.inOut", yoyo: true, repeat: 1 }, 1.2);
+      // Dot glow swell
+      tl.to("#s1-dot", { boxShadow: "0 0 55px rgba(56,189,248,1)", duration: 0.7, ease: "sine.inOut", yoyo: true, repeat: 2 }, 1.0);
+
+      // Typing animation via onUpdate
+      var queryStr = '> optimize("CHI→NYC", "3 pkgs", "2-day")';
+      var qObj = { v: 0 };
+      tl.to(qObj, {
+        v: queryStr.length, duration: 1.7, ease: "none",
+        onUpdate: function () {
+          document.getElementById("s1-qt").textContent = queryStr.slice(0, Math.floor(qObj.v));
+        }
+      }, 1.4);
+
+      tl.from("#s1-label", { autoAlpha: 0, y: 14, duration: 0.8, ease: "power2.out" }, 1.3);
+      tl.to("#s1-cursor", { autoAlpha: 0, duration: 0.28, ease: "steps(1)", yoyo: true, repeat: 3 }, 3.1);
+
+      // ─── SCENE 2 (4–10s) — Node graph: inputs→engine→outputs→carriers ─
+      tl.from("#s2-label",  { autoAlpha: 0, y: -10, duration: 0.7, ease: "power2.out" }, 4.3);
+      tl.from("#s2-status", { autoAlpha: 0, x: 12,  duration: 0.7, ease: "power2.out" }, 4.4);
+
+      // 1. Engine hub appears first
+      tl.to(["#ne","#ne-t1","#ne-t2"], { opacity: 1, duration: 0.6, ease: "back.out(1.8)" }, 4.44);
+
+      // 2. Input lines draw left→right (fan toward engine), top-to-bottom stagger
+      tl.to("#li-1", { strokeDashoffset: 0, duration: 0.76, ease: "power2.out" }, 4.7);
+      tl.to("#li-2", { strokeDashoffset: 0, duration: 0.7,  ease: "power2.out" }, 4.84);
+      tl.to("#li-3", { strokeDashoffset: 0, duration: 0.64, ease: "power2.out" }, 4.98);
+      tl.to("#li-4", { strokeDashoffset: 0, duration: 0.7,  ease: "power2.out" }, 5.12);
+      tl.to("#li-5", { strokeDashoffset: 0, duration: 0.76, ease: "power2.out" }, 5.26);
+
+      // 3. Input nodes pop at their origin
+      tl.to(["#ni-1","#ni-1a","#ni-1b"], { opacity: 1, duration: 0.44, ease: "expo.out" }, 4.72);
+      tl.to(["#ni-2","#ni-2a","#ni-2b"], { opacity: 1, duration: 0.44, ease: "expo.out" }, 4.86);
+      tl.to(["#ni-3","#ni-3a","#ni-3b"], { opacity: 1, duration: 0.44, ease: "expo.out" }, 5.0);
+      tl.to(["#ni-4","#ni-4a","#ni-4b"], { opacity: 1, duration: 0.44, ease: "expo.out" }, 5.14);
+      tl.to(["#ni-5","#ni-5a","#ni-5b"], { opacity: 1, duration: 0.44, ease: "expo.out" }, 5.28);
+
+      // 4. Engine processes — stroke pulse as all inputs arrive
+      tl.to("#ne", { strokeWidth: 4.5, duration: 0.56, ease: "power3.out", yoyo: true, repeat: 1 }, 5.52);
+
+      // 5. Output lines draw engine→category nodes (fan right)
+      tl.to("#lo-1", { strokeDashoffset: 0, duration: 0.7,  ease: "power2.out" }, 5.76);
+      tl.to("#lo-2", { strokeDashoffset: 0, duration: 0.6,  ease: "power2.out" }, 5.88);
+      tl.to("#lo-3", { strokeDashoffset: 0, duration: 0.7,  ease: "power2.out" }, 6.0);
+
+      // 6. Output category nodes pop in
+      tl.to(["#no-1","#no-1t"],          { opacity: 1, duration: 0.52, ease: "back.out(1.6)" }, 5.84);
+      tl.to(["#no-2","#no-2t","#no-2v"], { opacity: 1, duration: 0.52, ease: "back.out(1.6)" }, 5.96);
+      tl.to(["#no-3","#no-3t"],          { opacity: 1, duration: 0.52, ease: "back.out(1.6)" }, 6.08);
+
+      // 7. Carrier option lines (all 3 groups simultaneously, staggered within each)
+      tl.to(["#lc-s1","#lc-s2"], { strokeDashoffset: 0, duration: 0.48, ease: "power2.out", stagger: 0.1 }, 6.24);
+      tl.to(["#lc-r1","#lc-r2"], { strokeDashoffset: 0, duration: 0.48, ease: "power2.out", stagger: 0.1 }, 6.34);
+      tl.to(["#lc-c1","#lc-c2"], { strokeDashoffset: 0, duration: 0.48, ease: "power2.out", stagger: 0.1 }, 6.44);
+
+      // 8. Carrier option nodes pop
+      tl.to(["#nc-s1","#nc-s1t"], { opacity: 1, duration: 0.44, ease: "back.out(1.5)" }, 6.36);
+      tl.to(["#nc-s2","#nc-s2t"], { opacity: 1, duration: 0.44, ease: "expo.out"      }, 6.48);
+      tl.to(["#nc-r1","#nc-r1t"], { opacity: 1, duration: 0.44, ease: "back.out(1.5)" }, 6.46);
+      tl.to(["#nc-r2","#nc-r2t"], { opacity: 1, duration: 0.44, ease: "expo.out"      }, 6.58);
+      tl.to(["#nc-c1","#nc-c1t"], { opacity: 1, duration: 0.44, ease: "expo.out"      }, 6.56);
+      tl.to(["#nc-c2","#nc-c2t"], { opacity: 1, duration: 0.44, ease: "expo.out"      }, 6.68);
+
+      // 9. FedEx nodes glow (best carrier, mid-scene activity)
+      tl.to(["#nc-s1","#nc-r1"], { strokeWidth: 3.5, duration: 0.8, ease: "sine.inOut", yoyo: true, repeat: 1 }, 7.1);
+      // Engine fill pulse
+      tl.to("#ne", { fill: "rgba(56,189,248,0.12)", duration: 1.0, ease: "sine.inOut", yoyo: true, repeat: 1 }, 6.9);
+
+      // ─── SCENE 3 (10–15s) — Carrier eval (SHADER ANCHOR) ─────────
+      tl.from("#s3-eyebrow", { autoAlpha: 0, y: -10, duration: 0.6,  ease: "power2.out"  }, 10.36);
+      tl.from("#s3-title",   { autoAlpha: 0, y: 32,  duration: 1.0,  ease: "power3.out"  }, 10.6);
+
+      tl.from(["#s3-row1","#s3-row2","#s3-row3","#s3-row4"], {
+        autoAlpha: 0, x: -44, duration: 0.76, ease: "power2.out",
+        stagger: { each: 0.22, from: "start" }
+      }, 11.04);
+
+      // Bars fill
+      tl.to("#bar-fedex", { width: "96%", duration: 1.1, ease: "expo.out" }, 11.44);
+      tl.to("#bar-ups",   { width: "84%", duration: 1.1, ease: "expo.out" }, 11.68);
+      tl.to("#bar-usps",  { width: "71%", duration: 1.1, ease: "expo.out" }, 11.92);
+      tl.to("#bar-dhl",   { width: "68%", duration: 1.1, ease: "expo.out" }, 12.16);
+
+      // Factor chips
+      tl.from(["#fc1","#fc2","#fc3","#fc4","#fc5"], {
+        autoAlpha: 0, x: 30, duration: 0.6, ease: "power2.out",
+        stagger: { each: 0.18, from: "start" }
+      }, 11.2);
+
+      // Badge + best-row pulse
+      tl.from("#s3-badge", { autoAlpha: 0, scale: 0.8, duration: 0.76, ease: "back.out(1.8)" }, 12.44);
+      tl.to("#s3-row1", { boxShadow: "0 0 28px rgba(34,197,94,0.18)", duration: 1.0, ease: "sine.inOut", yoyo: true, repeat: 1 }, 13.0);
+
+      // ─── SCENE 4 (15–20s) — Analytics (SHADER ANCHOR) ───────────
+      tl.from("#s4-rec-label", { autoAlpha: 0, y: -10, duration: 0.6,  ease: "power2.out" }, 15.3);
+      tl.from("#s4-carrier",   { autoAlpha: 0, y: 44,  duration: 1.0,  ease: "expo.out"   }, 15.56);
+      tl.from("#s4-service",   { autoAlpha: 0, x: -22, duration: 0.76, ease: "power2.out" }, 16.1);
+      tl.from("#s4-sav-lbl",   { autoAlpha: 0, duration: 0.6,  ease: "power2.out" }, 16.4);
+      tl.from("#s4-sav-val",   { autoAlpha: 0, scale: 0.82, duration: 0.76, ease: "back.out(1.5)", transformOrigin: "50% 50%" }, 16.56);
+
+      // Savings counter
+      var savObj = { v: 0 };
+      tl.to(savObj, {
+        v: 2.47, duration: 2.2, ease: "power2.out",
+        onUpdate: function () {
+          document.getElementById("s4-sav-val").textContent = "$" + savObj.v.toFixed(2) + " / shipment";
+        }
+      }, 16.64);
+
+      // Chart bars
+      tl.from("#s4-chart-lbl", { autoAlpha: 0, duration: 0.6, ease: "power2.out" }, 15.44);
+      tl.to("#cb1", { scaleY: 1, duration: 1.0, ease: "expo.out" }, 15.96);
+      tl.to("#cb2", { scaleY: 1, duration: 1.0, ease: "expo.out" }, 16.16);
+      tl.to("#cb3", { scaleY: 1, duration: 1.0, ease: "expo.out" }, 16.36);
+      tl.to("#cb4", { scaleY: 1, duration: 1.0, ease: "expo.out" }, 16.56);
+      tl.from("#s4-chart", { autoAlpha: 0, duration: 0.7, ease: "power2.out" }, 15.44);
+
+
+      // ─── SCENE 5 (20–22s) — Close ────────────────────────────────
+      tl.to("#s5-rule",     { width: 220, duration: 0.9,  ease: "power2.out"  }, 20.24);
+      tl.from("#s5-logo",   { autoAlpha: 0, y: 32, duration: 1.0, ease: "power3.out" }, 20.24);
+      tl.from("#s5-tagline",{ autoAlpha: 0, y: 16, duration: 0.76, ease: "power2.out" }, 20.84);
+
+      // ─── Shader: s3 → s4 (carrier results → analytics) ───────────
+      window.HyperShader.init({
+        bgColor: getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#070d1a",
+        scenes: ["s3", "s4"],
+        timeline: tl,
+        transitions: [{ time: 14.5, shader: "cinematic-zoom", duration: 1.0 }],
+      });
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

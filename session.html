@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Session — AI Dance Partner</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0E0E10;
+    --text-1: #F2EAD9;
+    --accent: #C8874A;
+    --spring: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #0a0a0c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  /* ── Phone shell ─────────────────────────────────────── */
+  .phone {
+    position: relative;
+    width: 390px;
+    height: 844px;
+    background: var(--bg);
+    border-radius: 52px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.06),
+      0 0 0 12px #111114,
+      0 0 0 13px rgba(255,255,255,0.04),
+      0 48px 120px rgba(0,0,0,0.95);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ── Full-screen on actual mobile ────────────────────── */
+  @media (max-width: 500px) {
+    html, body { background: var(--bg); }
+    .phone {
+      width: 100vw;
+      height: 100dvh;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+
+  /* ── Camera PiP ──────────────────────────────────────── */
+  .cam {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 100px;
+    height: 140px;
+    border-radius: 12px;
+    object-fit: cover;
+    opacity: 0.4;
+    transform: scaleX(-1);
+    background: rgba(255,255,255,0.04);
+    z-index: 5;
+  }
+
+  /* ── Breathing circle ────────────────────────────────── */
+  .circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1.5px solid rgba(255,255,255,0.20);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    will-change: width, height;
+  }
+
+  .circle.amber {
+    border-color: rgba(200,135,74,0.72);
+    box-shadow: 0 0 32px rgba(200,135,74,0.14), inset 0 0 20px rgba(200,135,74,0.06);
+  }
+
+  /* ── Waveform bars ───────────────────────────────────── */
+  .bars {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  .bars.show { opacity: 1; }
+
+  .bar {
+    width: 2.5px;
+    background: var(--accent);
+    border-radius: 2px;
+    height: 6px;
+    will-change: height;
+  }
+
+  /* ── Bottom track info + progress ────────────────────── */
+  .bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .track-name {
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(242,234,217,0.38);
+    letter-spacing: 0.05em;
+    text-align: center;
+    margin-bottom: 16px;
+    white-space: nowrap;
+  }
+
+  .progress-rail {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.14);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-head {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0%;
+    background: rgba(255,255,255,0.52);
+    transition: width 0.6s linear;
+  }
+
+  /* ── End-session overlay ─────────────────────────────── */
+  .end-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(14,14,16,0.90);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+    z-index: 50;
+  }
+
+  .end-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ── Tap hint ────────────────────────────────────────── */
+  .tap-hint {
+    position: absolute;
+    bottom: 96px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 300;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(242,234,217,0.25);
+    opacity: 0;
+    transition: opacity 0.8s ease;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .tap-hint.show { opacity: 1; }
+  .tap-hint.hide { opacity: 0; }
+
+  .end-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 24px;
+    color: var(--text-1);
+    letter-spacing: 0.01em;
+    margin-bottom: 6px;
+  }
+
+  .end-sub {
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(242,234,217,0.40);
+    letter-spacing: 0.03em;
+    margin-bottom: 14px;
+  }
+
+  .end-confirm {
+    padding: 14px 44px;
+    border-radius: 40px;
+    border: 1px solid rgba(242,234,217,0.22);
+    background: transparent;
+    color: rgba(242,234,217,0.88);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .end-confirm:active { opacity: 0.6; }
+
+  .end-cancel {
+    font-size: 13px;
+    font-weight: 300;
+    color: rgba(242,234,217,0.30);
+    cursor: pointer;
+    padding: 10px 20px;
+    -webkit-tap-highlight-color: transparent;
+    letter-spacing: 0.02em;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+
+  <video class="cam" id="cam" autoplay muted playsinline></video>
+
+  <div class="circle" id="circle">
+    <div class="bars" id="bars">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="track-name" id="trackName"></div>
+    <div class="progress-rail">
+      <div class="progress-head" id="progressHead"></div>
+    </div>
+  </div>
+
+  <div class="tap-hint" id="tapHint">tap anywhere to begin</div>
+
+  <div class="end-overlay" id="endOverlay">
+    <div class="end-title">End session?</div>
+    <div class="end-sub">Your practice is saved</div>
+    <button class="end-confirm" onclick="confirmEnd()">End session</button>
+    <div class="end-cancel" onclick="dismissEnd()">Keep going</div>
+  </div>
+
+</div>
+
+<script>
+// ─── Song + persona from URL params ───────────────────────────
+const SONGS = [
+  { track: 'Essence · Wizkid ft. Tems',  bpm: 109 },
+  { track: 'Show Me Love · Robin S.',     bpm: 129 },
+  { track: 'Slow Motion · Trey Songz',   bpm: 72  },
+];
+const PERSONA_LINES = [
+  // calm collaborator
+  [
+    "Your weight is landing right on the downbeat.",
+    "Let the pause before the drop build the tension.",
+    "Your body already knows this chorus — let it lead.",
+    "Feel the space between the notes. That's yours.",
+  ],
+  // quiet observer
+  [
+    "Notice that.",
+    "Your hips are ahead of the beat now.",
+    "There.",
+    "The transition — you felt it before it came.",
+  ],
+  // encouraging hype
+  [
+    "Yes — that landing was clean.",
+    "You're locking in. Keep going.",
+    "That pattern you just did? Do it again.",
+    "You're in it. Don't think now.",
+  ],
+];
+
+const params   = new URLSearchParams(location.search);
+const songIdx  = Math.min(Math.max(parseInt(params.get('song')    ?? '2', 10), 0), 2);
+const persIdx  = Math.min(Math.max(parseInt(params.get('persona') ?? '0', 10), 0), 2);
+const SONG     = SONGS[songIdx];
+const LINES    = PERSONA_LINES[persIdx];
+
+// ─── Config ────────────────────────────────────────────────────
+const BPM            = SONG.bpm;
+const CYCLE_MS       = 60000 / BPM;       // one beat in ms
+const C_MIN          = 140;               // breathing min diameter
+const C_MAX          = 152;               // breathing max diameter
+const C_PULSE        = 180;               // pulse peak
+const C_SPEAK        = 160;              // speaking hold size
+const SESSION_MS     = 5 * 60 * 1000;    // 5 min for progress demo
+
+// ─── State ─────────────────────────────────────────────────────
+let appState   = 'listening';             // 'listening' | 'pulse' | 'speaking'
+let sessionStart = null;
+let audioCtx   = null;
+let masterGain = null;
+let longPressTimer = null;
+let selectedVoice = null;
+
+// ─── DOM ───────────────────────────────────────────────────────
+const phone        = document.getElementById('phone');
+const cam          = document.getElementById('cam');
+const circleEl     = document.getElementById('circle');
+const barsEl       = document.getElementById('bars');
+const barEls       = [...barsEl.querySelectorAll('.bar')];
+const progressHead = document.getElementById('progressHead');
+const endOverlay   = document.getElementById('endOverlay');
+const trackNameEl  = document.getElementById('trackName');
+
+// Set track label from params
+trackNameEl.textContent = SONG.track;
+
+// ─── Circle sizing ─────────────────────────────────────────────
+function setSize(px) {
+  circleEl.style.width  = px + 'px';
+  circleEl.style.height = px + 'px';
+}
+
+// ─── Audio ─────────────────────────────────────────────────────
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.42;
+  masterGain.connect(audioCtx.destination);
+
+  // Ambient pad — four sine partials
+  [[110, 0.06], [165, 0.04], [220, 0.028], [330, 0.015]].forEach(([freq, vol]) => {
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = vol;
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start();
+  });
+
+  // Kick drum at song BPM
+  const gap = 60000 / BPM;
+  function kick() {
+    const now = audioCtx.currentTime;
+    const osc  = audioCtx.createOscillator();
+    const env  = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(105, now);
+    osc.frequency.exponentialRampToValueAtTime(36, now + 0.10);
+    env.gain.setValueAtTime(0.30, now);
+    env.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+    osc.connect(env);
+    env.connect(masterGain);
+    osc.start(now);
+    osc.stop(now + 0.20);
+  }
+  kick();
+  setInterval(kick, gap);
+}
+
+function duckMusic() {
+  if (!masterGain) return;
+  const now = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setTargetAtTime(0.42 * 0.7, now, 0.08);
+}
+
+function unduckMusic() {
+  if (!masterGain) return;
+  const now = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setTargetAtTime(0.42, now, 0.35);
+}
+
+// ─── Voice selection ───────────────────────────────────────────
+// Ranked by naturalness. Neural/Enhanced voices win over classic TTS.
+const VOICE_PRIORITY = [
+  'Samantha',                  // macOS — clean, warm, most natural default
+  'Ava (Enhanced)',            // macOS neural
+  'Allison (Enhanced)',        // macOS neural
+  'Google US English',         // Chrome neural
+  'Google UK English Female',  // Chrome
+  'Microsoft Aria Online',     // Edge neural
+  'Microsoft Jenny Online',    // Edge neural
+  'Microsoft Zira',            // Edge/Windows fallback
+  'Alex',                      // macOS classic — still better than generic
+  'Victoria',
+  'Karen',
+];
+
+function pickVoice() {
+  const voices = speechSynthesis.getVoices();
+  for (const name of VOICE_PRIORITY) {
+    const match = voices.find(v => v.name.includes(name));
+    if (match) return match;
+  }
+  // Any English Enhanced voice
+  const enhanced = voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced'));
+  if (enhanced) return enhanced;
+  // Any en-US
+  const enUS = voices.find(v => v.lang === 'en-US');
+  if (enUS) return enUS;
+  // Any English
+  return voices.find(v => v.lang.startsWith('en')) || null;
+}
+
+function loadVoices() {
+  return new Promise(resolve => {
+    const try_ = () => {
+      const voices = speechSynthesis.getVoices();
+      if (voices.length) { selectedVoice = pickVoice(); resolve(); }
+    };
+    try_();
+    if (!selectedVoice) {
+      speechSynthesis.onvoiceschanged = () => { selectedVoice = pickVoice(); resolve(); };
+      setTimeout(resolve, 1500); // don't block boot if voices never fire
+    }
+  });
+}
+
+// ─── Camera ────────────────────────────────────────────────────
+async function initCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    cam.srcObject = stream;
+  } catch (_) {}
+}
+
+// ─── Wake lock ─────────────────────────────────────────────────
+async function initWakeLock() {
+  try { await navigator.wakeLock.request('screen'); } catch (_) {}
+}
+
+// ─── Main RAF ──────────────────────────────────────────────────
+function frame(now) {
+  if (!sessionStart) sessionStart = now;
+  const elapsed = now - sessionStart;
+
+  // Progress hairline
+  progressHead.style.width = Math.min(elapsed / SESSION_MS * 100, 100) + '%';
+
+  // Breathing (listening only — pulse has its own RAF)
+  if (appState === 'listening') {
+    const phase = (elapsed % CYCLE_MS) / CYCLE_MS * Math.PI * 2 - Math.PI / 2;
+    const t     = (Math.sin(phase) + 1) * 0.5;
+    setSize(C_MIN + (C_MAX - C_MIN) * t);
+  }
+
+  // Waveform bars (speaking only)
+  if (appState === 'speaking') {
+    const t = now / 1000;
+    barEls.forEach((bar, i) => {
+      const a = (Math.sin(t * 4.8 + i * 1.05) + 1) * 0.5;
+      const b = (Math.cos(t * 7.1 + i * 2.20) + 1) * 0.5;
+      bar.style.height = (6 + (a * 0.62 + b * 0.38) * 42) + 'px';
+    });
+  }
+
+  requestAnimationFrame(frame);
+}
+
+// ─── State: pulse ──────────────────────────────────────────────
+function firePulse() {
+  if (appState !== 'listening') return;
+  appState = 'pulse';
+  circleEl.classList.add('amber');
+
+  const startPx = parseFloat(circleEl.style.width) || C_MAX;
+  const t0 = performance.now();
+
+  function animatePulse(now) {
+    const dt = now - t0;
+    let size;
+
+    if (dt < 190) {
+      // Cubic ease-out: snap to peak
+      const p = 1 - Math.pow(1 - dt / 190, 3);
+      size = startPx + (C_PULSE - startPx) * p;
+    } else if (dt < 430) {
+      // Quadratic ease-in: settle down past C_MIN
+      const p = Math.pow((dt - 190) / 240, 2);
+      size = C_PULSE + (C_MIN - C_PULSE) * p;
+    } else {
+      setSize(C_MIN);
+      toSpeaking();
+      return;
+    }
+
+    setSize(size);
+    requestAnimationFrame(animatePulse);
+  }
+
+  requestAnimationFrame(animatePulse);
+}
+
+// ─── State: speaking ───────────────────────────────────────────
+function toSpeaking() {
+  appState = 'speaking';
+  setSize(C_SPEAK);
+  barsEl.classList.add('show');
+  duckMusic();
+
+  const utt = new SpeechSynthesisUtterance(LINES[Math.floor(Math.random() * LINES.length)]);
+  if (selectedVoice) utt.voice = selectedVoice;
+  utt.rate   = 0.80;  // deliberate — leaves space, less TTS-robotic
+  utt.pitch  = 0.90;  // grounded, not shrill
+  utt.volume = 0.92;
+
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    toListening();
+  };
+
+  utt.onend = finish;
+  setTimeout(finish, 5500); // safety
+
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utt);
+}
+
+// ─── State: listening ──────────────────────────────────────────
+function toListening() {
+  appState = 'listening';
+  circleEl.classList.remove('amber');
+  barsEl.classList.remove('show');
+  barEls.forEach(b => { b.style.height = '6px'; });
+  unduckMusic();
+
+  // Loop: next pulse in ~15s
+  setTimeout(firePulse, 15000);
+}
+
+// ─── End overlay ───────────────────────────────────────────────
+function showEnd()    { endOverlay.classList.add('show'); }
+function dismissEnd() { endOverlay.classList.remove('show'); }
+function confirmEnd() { dismissEnd(); }
+
+// Long-press 1.5s → end overlay (no short taps do anything)
+phone.addEventListener('mousedown',  () => { longPressTimer = setTimeout(showEnd, 1500); });
+phone.addEventListener('mouseup',    () => clearTimeout(longPressTimer));
+phone.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
+phone.addEventListener('touchstart', () => { longPressTimer = setTimeout(showEnd, 1500); }, { passive: true });
+phone.addEventListener('touchend',   () => clearTimeout(longPressTimer));
+phone.addEventListener('touchmove',  () => clearTimeout(longPressTimer), { passive: true });
+
+// ─── Boot ──────────────────────────────────────────────────────
+const tapHint = document.getElementById('tapHint');
+let sessionStarted = false;
+
+function startSession() {
+  if (sessionStarted) return;
+  sessionStarted = true;
+
+  // Prime speech synthesis inside the gesture (iOS WebKit requires this)
+  const prime = new SpeechSynthesisUtterance(' ');
+  prime.volume = 0;
+  prime.rate   = 10;
+  speechSynthesis.speak(prime);
+
+  initAudio();
+
+  // Hide hint
+  tapHint.classList.remove('show');
+  tapHint.classList.add('hide');
+
+  // First pulse at 8s
+  setTimeout(firePulse, 8000);
+}
+
+async function boot() {
+  await Promise.all([initCamera(), loadVoices()]);
+  initWakeLock();
+  try { await screen.orientation.lock('portrait'); } catch (_) {}
+
+  requestAnimationFrame(frame);
+
+  // Show tap hint after a beat
+  setTimeout(() => tapHint.classList.add('show'), 800);
+
+  document.addEventListener('click',      startSession, { once: true });
+  document.addEventListener('touchstart', startSession, { once: true, passive: true });
+}
+
+boot();
+</script>
+</body>
+</html>

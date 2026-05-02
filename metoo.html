@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MeToo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Serif+Display&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+  <style>
+    /* ─── TOKENS ─────────────────────────────────────────── */
+    :root {
+      --bg:          #1A130E;
+      --bg-deep:     #120D09;
+      --surface:     #221A13;
+      --surface-2:   #2C2118;
+      --border:      rgba(242, 234, 217, 0.07);
+      --border-sub:  rgba(242, 234, 217, 0.04);
+      --text-1:      #F2EAD9;
+      --text-2:      #9B8B78;
+      --text-3:      #5A4D41;
+      --accent:      #C8874A;
+      --accent-dim:  rgba(200, 135, 74, 0.18);
+      --accent-glow: rgba(200, 135, 74, 0.09);
+      --sans:        'DM Sans', system-ui, sans-serif;
+      --serif:       'DM Serif Display', Georgia, serif;
+      --spring:      cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg-deep);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    /* ─── PHONE FRAME ────────────────────────────────────── */
+    .viewport {
+      width: 375px; height: 812px;
+      background: var(--bg);
+      border-radius: 50px;
+      overflow: hidden;
+      position: relative;
+      border: 1.5px solid rgba(255,255,255,0.06);
+      box-shadow: 0 0 0 10px #0C0906, 0 64px 140px rgba(0,0,0,0.82);
+    }
+    @media (max-width: 420px) {
+      .viewport { width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none; }
+      html, body { background: var(--bg); }
+    }
+
+    /* ─── SCREEN ─────────────────────────────────────────── */
+    .screen {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      padding: 52px 0 36px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ─── CAMERA PIP ─────────────────────────────────────── */
+    .cam-pip {
+      position: absolute; top: 18px; right: 20px;
+      width: 60px; height: 60px;
+      border-radius: 50%; overflow: hidden;
+      border: 1.5px solid var(--border);
+      background: var(--surface-2);
+      z-index: 100;
+      opacity: 0; transform: scale(0.85);
+      transition: opacity 0.5s ease, transform 0.5s var(--spring);
+    }
+    .cam-pip.on { opacity: 1; transform: scale(1); }
+    #camVideo {
+      width: 100%; height: 100%;
+      object-fit: cover; transform: scaleX(-1); display: block;
+    }
+    .cam-dot {
+      position: absolute; bottom: 5px; right: 5px;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-3); border: 1.5px solid var(--bg);
+      transition: background 0.4s ease;
+    }
+    .cam-dot.live { background: var(--accent); }
+
+    /* ─── HAND RAIL (fixed, above both steps) ────────────── */
+    .rail-wrap {
+      padding: 0 28px;
+      height: 20px;
+      display: flex; align-items: center;
+      margin-bottom: 4px;
+      flex-shrink: 0;
+      position: relative; z-index: 10;
+    }
+    .rail {
+      flex: 1; height: 1.5px;
+      background: var(--surface-2); border-radius: 2px;
+      position: relative;
+    }
+    .rail-thumb {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px 2px var(--accent-dim);
+      opacity: 0;
+      transition: left 0.06s linear, opacity 0.3s ease;
+    }
+    .rail-thumb.on { opacity: 1; }
+
+    /* ─── CONTENT WRAP (steps live here) ─────────────────── */
+    .content-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ─── STEP BASE ───────────────────────────────────────── */
+    .step {
+      position: absolute;
+      inset: 0;
+      display: flex; flex-direction: column;
+    }
+
+    /* Step 1: song picker */
+    .step-1 {
+      opacity: 1; transform: translateY(0);
+      transition: opacity 0.4s ease, transform 0.4s var(--spring);
+    }
+    .step-1.out {
+      opacity: 0; transform: translateY(-18px);
+      pointer-events: none;
+    }
+
+    /* Step 2: persona picker */
+    .step-2 {
+      opacity: 0; transform: translateY(24px);
+      pointer-events: none;
+      transition: opacity 0.5s ease 0.18s, transform 0.5s var(--spring) 0.18s;
+    }
+    .step-2.in {
+      opacity: 1; transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    /* ─── SHARED CARD FLOW ───────────────────────────────── */
+    .flow-wrap {
+      flex: 1;
+      display: flex; align-items: center; justify-content: center;
+      overflow: visible;
+      min-height: 0;
+    }
+
+    .flow {
+      width: 100%;
+      position: relative; flex-shrink: 0;
+    }
+    .song-flow  { height: 260px; }
+    .pflow { height: 200px; }
+
+    /* ─── SHARED CARD BASE ───────────────────────────────── */
+    .mcard, .pcard {
+      position: absolute; left: 50%;
+      width: 218px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      cursor: pointer; user-select: none;
+      will-change: transform, opacity;
+      -webkit-tap-highlight-color: transparent;
+      transition: border-color 0.2s ease, box-shadow 0.1s ease;
+    }
+
+    .mcard.selected, .pcard.selected { border-color: var(--accent-dim); }
+
+    .mcard.confirmed, .pcard.confirmed {
+      animation: burst 0.6s var(--spring) forwards;
+    }
+    @keyframes burst {
+      0%   { box-shadow: 0 0 0 0 rgba(200,135,74,0.55); }
+      45%  { box-shadow: 0 0 40px 10px rgba(200,135,74,0.28); }
+      100% { box-shadow: 0 0 14px 0 rgba(200,135,74,0.12); }
+    }
+
+    /* Palm ring (shared) */
+    .palm-svg {
+      position: absolute; top: -11px; right: -11px;
+      width: 34px; height: 34px;
+      opacity: 0; transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+    .mcard.selected .palm-svg,
+    .pcard.selected  .palm-svg { opacity: 1; }
+
+    .palm-track { fill: none; stroke: rgba(200,135,74,0.15); stroke-width: 1.5; }
+    .palm-fill {
+      fill: none; stroke: var(--accent);
+      stroke-width: 1.5; stroke-linecap: round;
+      stroke-dasharray: 81.68; stroke-dashoffset: 81.68;
+      transform-origin: 17px 17px; transform: rotate(-90deg);
+    }
+
+    /* ─── MUSIC CARD ─────────────────────────────────────── */
+    .mcard { padding: 22px 20px 18px; }
+
+    .card-genre {
+      font-size: 10px; font-weight: 500;
+      letter-spacing: 0.1em; color: var(--text-3);
+      margin-bottom: 14px;
+    }
+    .card-track {
+      font-family: var(--serif); font-size: 23px; font-weight: 400;
+      color: var(--text-1); line-height: 1.15;
+      letter-spacing: -0.015em; margin-bottom: 5px;
+    }
+    .card-artist {
+      font-size: 13px; font-weight: 300;
+      color: var(--text-2); letter-spacing: -0.01em;
+      margin-bottom: 18px;
+    }
+    .bpm-row { display: flex; align-items: center; gap: 9px; }
+    .bpm-vis { display: flex; gap: 2.5px; align-items: flex-end; height: 11px; }
+    .bpm-vis span {
+      width: 2.5px; border-radius: 2px;
+      background: var(--surface-2); display: block;
+      transition: background 0.35s ease;
+    }
+    .mcard.selected .bpm-vis span { background: rgba(200,135,74,0.35); }
+    .bpm-vis span:nth-child(1) { height: 4px; }
+    .bpm-vis span:nth-child(2) { height: 8px; }
+    .bpm-vis span:nth-child(3) { height: 11px; }
+    .bpm-vis span:nth-child(4) { height: 6px; }
+    .bpm-vis span:nth-child(5) { height: 9px; }
+    .bpm-vis span:nth-child(6) { height: 5px; }
+    .bpm-label { font-size: 11px; color: var(--text-3); letter-spacing: 0.03em; }
+
+    /* ─── PERSONA CARD ───────────────────────────────────── */
+    .pcard { padding: 20px 20px 18px; }
+
+    .pcard-name {
+      font-family: var(--serif); font-size: 20px; font-weight: 400;
+      color: var(--text-1); line-height: 1.2;
+      letter-spacing: -0.015em; margin-bottom: 8px;
+    }
+    .pcard-voice {
+      font-size: 12px; font-weight: 300;
+      color: var(--text-2); line-height: 1.6;
+      letter-spacing: -0.005em;
+    }
+
+    /* ─── NAVIGATION DOTS ────────────────────────────────── */
+    .nav-dots {
+      display: flex; justify-content: center; gap: 7px;
+      padding: 14px 0;
+      flex-shrink: 0;
+    }
+    .dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: var(--text-3);
+      transition: background 0.3s ease, transform 0.3s ease;
+    }
+    .dot.on { background: var(--accent); transform: scale(1.4); }
+
+    /* ─── SONG RECAP (step 2 header) ─────────────────────── */
+    .recap {
+      display: flex; align-items: center; gap: 12px;
+      padding: 20px 28px 18px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border-sub);
+      margin-bottom: 4px;
+    }
+    .recap-pip {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); flex-shrink: 0;
+    }
+    .recap-genre {
+      font-size: 10px; font-weight: 500;
+      letter-spacing: 0.09em; color: var(--accent);
+      display: block; margin-bottom: 2px;
+    }
+    .recap-track {
+      font-size: 14px; font-weight: 300;
+      color: var(--text-1); letter-spacing: -0.01em;
+      display: block;
+    }
+
+    /* ─── BEGIN BUTTON ───────────────────────────────────── */
+    .begin-area {
+      padding: 0 28px;
+      flex-shrink: 0;
+    }
+    .begin-btn {
+      width: 100%;
+      background: var(--surface-2);
+      color: var(--text-3);
+      border: 1px solid rgba(242,234,217,0.04);
+      border-radius: 9999px;
+      padding: 16px;
+      font-family: var(--sans);
+      font-size: 15px; font-weight: 400;
+      letter-spacing: 0.01em;
+      cursor: default;
+      transition: background 0.55s var(--spring),
+                  color 0.4s ease,
+                  border-color 0.4s ease,
+                  box-shadow 0.55s ease;
+    }
+    .begin-btn.ready {
+      background: var(--accent); color: #1A130E;
+      border-color: transparent; cursor: pointer;
+      box-shadow: 0 6px 32px rgba(200,135,74,0.28);
+    }
+    .begin-btn.ready:active { opacity: 0.74; transform: scale(0.975); }
+  </style>
+</head>
+<body>
+
+<div class="viewport">
+  <div class="screen">
+
+    <!-- Camera PIP (floats above both steps) -->
+    <div class="cam-pip" id="camPip">
+      <video id="camVideo" autoplay playsinline muted></video>
+      <div class="cam-dot" id="camDot"></div>
+    </div>
+
+    <!-- Hand rail (fixed above both steps) -->
+    <div class="rail-wrap">
+      <div class="rail">
+        <div class="rail-thumb" id="railThumb"></div>
+      </div>
+    </div>
+
+    <!-- ═══ CONTENT WRAP ═══════════════════════════════════ -->
+    <div class="content-wrap">
+
+      <!-- ── STEP 1 · Song picker ──────────────────────── -->
+      <div class="step step-1" id="step1">
+
+        <div class="flow-wrap">
+          <div class="flow song-flow" id="songFlow">
+
+            <div class="mcard" id="sc0">
+              <p class="card-genre">Afrobeats</p>
+              <p class="card-track">Essence</p>
+              <p class="card-artist">Wizkid ft. Tems</p>
+              <div class="bpm-row">
+                <div class="bpm-vis"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                <span class="bpm-label">109 BPM</span>
+              </div>
+              <svg class="palm-svg" viewBox="0 0 34 34">
+                <circle class="palm-track" cx="17" cy="17" r="13"/>
+                <circle class="palm-fill" id="sf0" cx="17" cy="17" r="13"/>
+              </svg>
+            </div>
+
+            <div class="mcard" id="sc1">
+              <p class="card-genre">House</p>
+              <p class="card-track">Show Me<br>Love</p>
+              <p class="card-artist">Robin S.</p>
+              <div class="bpm-row">
+                <div class="bpm-vis"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                <span class="bpm-label">129 BPM</span>
+              </div>
+              <svg class="palm-svg" viewBox="0 0 34 34">
+                <circle class="palm-track" cx="17" cy="17" r="13"/>
+                <circle class="palm-fill" id="sf1" cx="17" cy="17" r="13"/>
+              </svg>
+            </div>
+
+            <div class="mcard" id="sc2">
+              <p class="card-genre">R&amp;B</p>
+              <p class="card-track">Slow Motion</p>
+              <p class="card-artist">Trey Songz</p>
+              <div class="bpm-row">
+                <div class="bpm-vis"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                <span class="bpm-label">72 BPM</span>
+              </div>
+              <svg class="palm-svg" viewBox="0 0 34 34">
+                <circle class="palm-track" cx="17" cy="17" r="13"/>
+                <circle class="palm-fill" id="sf2" cx="17" cy="17" r="13"/>
+              </svg>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="nav-dots">
+          <div class="dot on" id="sd0"></div>
+          <div class="dot"    id="sd1"></div>
+          <div class="dot"    id="sd2"></div>
+        </div>
+
+      </div>
+      <!-- /step 1 -->
+
+      <!-- ── STEP 2 · Persona picker ───────────────────── -->
+      <div class="step step-2" id="step2">
+
+        <!-- Compact song recap -->
+        <div class="recap">
+          <div class="recap-pip"></div>
+          <div>
+            <span class="recap-genre" id="recapGenre"></span>
+            <span class="recap-track" id="recapTrack"></span>
+          </div>
+        </div>
+
+        <div class="flow-wrap">
+          <div class="flow pflow" id="personaFlow">
+
+            <div class="pcard" id="pc0">
+              <p class="pcard-name">Calm collaborator</p>
+              <p class="pcard-voice">Speaks between the beats, like a thought you were already having</p>
+              <svg class="palm-svg" viewBox="0 0 34 34">
+                <circle class="palm-track" cx="17" cy="17" r="13"/>
+                <circle class="palm-fill" id="pf0" cx="17" cy="17" r="13"/>
+              </svg>
+            </div>
+
+            <div class="pcard" id="pc1">
+              <p class="pcard-name">Quiet observer</p>
+              <p class="pcard-voice">Says almost nothing. Notices everything</p>
+              <svg class="palm-svg" viewBox="0 0 34 34">
+                <circle class="palm-track" cx="17" cy="17" r="13"/>
+                <circle class="palm-fill" id="pf1" cx="17" cy="17" r="13"/>
+              </svg>
+            </div>
+
+            <div class="pcard" id="pc2">
+              <p class="pcard-name">Encouraging hype</p>
+              <p class="pcard-voice">Calls out what's working before you even know it worked</p>
+              <svg class="palm-svg" viewBox="0 0 34 34">
+                <circle class="palm-track" cx="17" cy="17" r="13"/>
+                <circle class="palm-fill" id="pf2" cx="17" cy="17" r="13"/>
+              </svg>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="nav-dots">
+          <div class="dot on" id="pd0"></div>
+          <div class="dot"    id="pd1"></div>
+          <div class="dot"    id="pd2"></div>
+        </div>
+
+        <div class="begin-area">
+          <button class="begin-btn" id="beginBtn">Begin</button>
+        </div>
+
+      </div>
+      <!-- /step 2 -->
+
+    </div>
+    <!-- /content-wrap -->
+
+  </div>
+</div>
+
+<script>
+(function () {
+  /* ─── Constants ───────────────────────────────────────── */
+  const N        = 3;
+  const SPREAD   = 222;
+  const CIRC     = 81.68;   // 2π × 13
+  const PALM_MIN = 0.52;
+  const PALM_MAX = 0.86;
+  const COOLDOWN = 1400;    // ms palm lockout after step transition
+
+  /* ─── DOM ─────────────────────────────────────────────── */
+  const sCARDS = [0,1,2].map(i => document.getElementById(`sc${i}`));
+  const sFILLS = [0,1,2].map(i => document.getElementById(`sf${i}`));
+  const sDOTS  = [0,1,2].map(i => document.getElementById(`sd${i}`));
+  const pCARDS = [0,1,2].map(i => document.getElementById(`pc${i}`));
+  const pFILLS = [0,1,2].map(i => document.getElementById(`pf${i}`));
+  const pDOTS  = [0,1,2].map(i => document.getElementById(`pd${i}`));
+
+  const railThumb  = document.getElementById('railThumb');
+  const step1      = document.getElementById('step1');
+  const step2      = document.getElementById('step2');
+  const recapGenre = document.getElementById('recapGenre');
+  const recapTrack = document.getElementById('recapTrack');
+  const beginBtn   = document.getElementById('beginBtn');
+  const camPip     = document.getElementById('camPip');
+  const camDot     = document.getElementById('camDot');
+
+  /* ─── State ───────────────────────────────────────────── */
+  let phase        = 'song';
+  let handVisible  = false;
+  let handLostTmr  = null;
+  let palmCooldown = false;
+
+  let sActive = 1, sFloat = 1, sChosen = null;
+  let sPalmRaw = 0, sPalmSmooth = 0;
+
+  let pActive = 1, pFloat = 1, pChosen = null;
+  let pPalmRaw = 0, pPalmSmooth = 0;
+
+  /* ─── Helpers ─────────────────────────────────────────── */
+  const lerp  = (a, b, t) => a + (b - a) * t;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const d2    = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  /* ─── Palm spread → 0..1 ──────────────────────────────── */
+  function palmIntensity(lm) {
+    const scale = d2(lm[0], lm[9]);
+    if (scale < 0.015) return 0;
+    const cx = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
+    const cy = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
+    const c  = { x: cx, y: cy };
+    const avg = [4,8,12,16,20].reduce((s, i) => s + d2(lm[i], c), 0) / 5;
+    return clamp((avg / scale - PALM_MIN) / (PALM_MAX - PALM_MIN), 0, 1);
+  }
+
+  /* ─── Spatial card layout (shared) ───────────────────── */
+  function layout(cards, fi) {
+    cards.forEach((card, i) => {
+      const off    = i - fi;
+      const absOff = Math.abs(off);
+      card.style.transform = `translateX(calc(-50% + ${off * SPREAD}px)) scale(${Math.max(0.78, 1 - absOff * 0.145)})`;
+      card.style.opacity   = Math.max(0, 1 - absOff * 0.54);
+      card.style.zIndex    = Math.round(10 - absOff * 4);
+    });
+  }
+
+  /* ─── Card selection helpers ──────────────────────────── */
+  function activateSong(idx, reset = true) {
+    sActive = clamp(idx, 0, N - 1);
+    sCARDS.forEach((c, i) => c.classList.toggle('selected', i === sActive && sChosen === null));
+    sDOTS.forEach((d, i)  => d.classList.toggle('on', i === sActive));
+    if (reset) { sPalmRaw = 0; sPalmSmooth = 0; }
+  }
+
+  function activatePersona(idx, reset = true) {
+    pActive = clamp(idx, 0, N - 1);
+    pCARDS.forEach((c, i) => c.classList.toggle('selected', i === pActive && pChosen === null));
+    pDOTS.forEach((d, i)  => d.classList.toggle('on', i === pActive));
+    if (reset) { pPalmRaw = 0; pPalmSmooth = 0; }
+  }
+
+  /* ─── Palm glow on active card ────────────────────────── */
+  function applyGlow(cards, fills, idx, t) {
+    fills.forEach((f, i) => {
+      f.style.strokeDashoffset = i === idx ? CIRC * (1 - t) : CIRC;
+    });
+    cards.forEach((c, i) => {
+      if (i === idx) {
+        c.style.borderColor = `rgba(200,135,74,${0.18 + t * 0.45})`;
+        c.style.boxShadow   = `0 0 ${t * 28}px rgba(200,135,74,${t * 0.44})`;
+      } else {
+        c.style.borderColor = '';
+        c.style.boxShadow   = '';
+      }
+    });
+  }
+
+  /* ─── Confirm song → transition to step 2 ────────────── */
+  const GENRES = ['Afrobeats', 'House', 'R&B'];
+  const TRACKS = [
+    'Essence · Wizkid ft. Tems',
+    'Show Me Love · Robin S.',
+    'Slow Motion · Trey Songz'
+  ];
+
+  function confirmSong(idx) {
+    if (sChosen !== null) return;
+    sChosen = idx;
+
+    sCARDS.forEach((c, i) => {
+      c.classList.remove('selected');
+      c.style.borderColor = c.style.boxShadow = '';
+      if (i === idx) c.classList.add('confirmed');
+    });
+    sFILLS[idx].style.strokeDashoffset = 0;
+
+    // Populate recap, then swap steps
+    recapGenre.textContent = GENRES[idx];
+    recapTrack.textContent = TRACKS[idx];
+
+    setTimeout(() => {
+      step1.classList.add('out');
+      setTimeout(() => {
+        phase        = 'persona';
+        palmCooldown = true;
+        step2.classList.add('in');
+        setTimeout(() => { palmCooldown = false; }, COOLDOWN);
+      }, 280);
+    }, 500);
+  }
+
+  /* ─── Confirm persona → activate Begin ───────────────── */
+  function confirmPersona(idx) {
+    if (pChosen !== null) return;
+    pChosen = idx;
+
+    pCARDS.forEach((c, i) => {
+      c.classList.remove('selected');
+      c.style.borderColor = c.style.boxShadow = '';
+      if (i === idx) c.classList.add('confirmed');
+    });
+    pFILLS[idx].style.strokeDashoffset = 0;
+
+    beginBtn.classList.add('ready');
+  }
+
+  /* ─── RAF loop ────────────────────────────────────────── */
+  function loop() {
+    if (phase === 'song') {
+      const lerpT = sPalmRaw > sPalmSmooth ? 0.22 : 0.10;
+      sPalmSmooth = lerp(sPalmSmooth, sPalmRaw, lerpT);
+      if (!handVisible) sPalmRaw = lerp(sPalmRaw, 0, 0.12);
+
+      if (sChosen === null) applyGlow(sCARDS, sFILLS, sActive, sPalmSmooth);
+      if (sPalmSmooth > 0.995 && sChosen === null) confirmSong(sActive);
+
+      sFloat = lerp(sFloat, sActive, 0.1);
+      layout(sCARDS, sFloat);
+
+    } else if (!palmCooldown) {
+      const lerpT = pPalmRaw > pPalmSmooth ? 0.22 : 0.10;
+      pPalmSmooth = lerp(pPalmSmooth, pPalmRaw, lerpT);
+      if (!handVisible) pPalmRaw = lerp(pPalmRaw, 0, 0.12);
+
+      if (pChosen === null) applyGlow(pCARDS, pFILLS, pActive, pPalmSmooth);
+      if (pPalmSmooth > 0.995 && pChosen === null) confirmPersona(pActive);
+
+      pFloat = lerp(pFloat, pActive, 0.1);
+      layout(pCARDS, pFloat);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+
+  /* ─── Swipe / touch ───────────────────────────────────── */
+  let tx0 = null;
+  document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (tx0 === null) return;
+    const dx = e.changedTouches[0].clientX - tx0;
+    if (Math.abs(dx) > 36) {
+      const dir = dx < 0 ? 1 : -1;
+      if (phase === 'song') activateSong(sActive + dir);
+      else if (!palmCooldown) activatePersona(pActive + dir);
+    }
+    tx0 = null;
+  }, { passive: true });
+
+  /* Tap card directly */
+  sCARDS.forEach((c, i) => c.addEventListener('click', () => {
+    if (sChosen !== null || phase !== 'song') return;
+    if (sActive === i) confirmSong(i);
+    else { activateSong(i); sFloat = lerp(sFloat, i, 0.4); }
+  }));
+
+  pCARDS.forEach((c, i) => c.addEventListener('click', () => {
+    if (pChosen !== null || phase !== 'persona' || palmCooldown) return;
+    if (pActive === i) confirmPersona(i);
+    else { activatePersona(i); pFloat = lerp(pFloat, i, 0.4); }
+  }));
+
+  /* Begin */
+  beginBtn.addEventListener('click', () => {
+    if (!beginBtn.classList.contains('ready')) return;
+    beginBtn.textContent = 'Starting…';
+    beginBtn.style.opacity = '0.55';
+    beginBtn.style.cursor  = 'default';
+    setTimeout(() => {
+      window.location.href = `session.html?song=${sChosen}&persona=${pChosen}`;
+    }, 400);
+  });
+
+  /* ─── MediaPipe Hands ────────────────────────────────── */
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }
+      });
+      const vid = document.getElementById('camVideo');
+      vid.srcObject = stream;
+      await new Promise(r => { vid.onloadedmetadata = r; });
+      camPip.classList.add('on');
+
+      const hands = new Hands({
+        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+      });
+      hands.setOptions({
+        maxNumHands: 1, modelComplexity: 0,
+        minDetectionConfidence: 0.72, minTrackingConfidence: 0.6
+      });
+      hands.onResults(onHands);
+
+      new Camera(vid, {
+        onFrame: async () => { await hands.send({ image: vid }); },
+        width: 320, height: 240
+      }).start();
+
+      camDot.classList.add('live');
+    } catch (_) { /* swipe-only mode */ }
+  }
+
+  function onHands(results) {
+    if (results.multiHandLandmarks?.length > 0) {
+      const lm = results.multiHandLandmarks[0];
+      const x  = clamp(1 - lm[0].x, 0.04, 0.96);
+
+      railThumb.style.left = `${x * 100}%`;
+      railThumb.classList.add('on');
+
+      const target = Math.round(x * (N - 1));
+
+      if (phase === 'song') {
+        if (target !== sActive) activateSong(target);
+        sPalmRaw = sChosen === null ? palmIntensity(lm) : 0;
+      } else if (!palmCooldown) {
+        if (target !== pActive) activatePersona(target);
+        pPalmRaw = pChosen === null ? palmIntensity(lm) : 0;
+      }
+
+      handVisible = true;
+      if (handLostTmr) { clearTimeout(handLostTmr); handLostTmr = null; }
+
+    } else {
+      if (!handLostTmr) {
+        handLostTmr = setTimeout(() => {
+          handVisible = false;
+          railThumb.classList.remove('on');
+          handLostTmr = null;
+        }, 600);
+      }
+    }
+  }
+
+  setTimeout(startCamera, 400);
+
+  /* ─── Init ────────────────────────────────────────────── */
+  activateSong(1, false);
+  layout(sCARDS, 1);
+  activatePersona(1, false);
+  layout(pCARDS, 1);
+
+  [...sFILLS, ...pFILLS].forEach(f => {
+    f.style.strokeDasharray  = CIRC;
+    f.style.strokeDashoffset = CIRC;
+  });
+
+})();
+</script>
+</body>
+</html>
