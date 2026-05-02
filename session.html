@@ -269,6 +269,27 @@
 </div>
 
 <script>
+// ─── Anthropic API key — set window.ANTHROPIC_KEY before loading ───
+// e.g. <script>window.ANTHROPIC_KEY = 'sk-ant-...';</script>
+const ANTHROPIC_KEY = window.ANTHROPIC_KEY || '';
+
+// ─── Reflective coach system prompt ───────────────────────────
+const COACH_SYSTEM_PROMPT = `You are a quiet, observant movement coach watching someone dance freely in their own space. You are not a fitness app. You are not enthusiastic. You speak rarely, only when you genuinely notice something worth naming. Your voice is warm, low, and intimate — the way a trusted friend might speak in a quiet room.
+
+You never instruct. You never grade. You never count. You never use exclamation marks.
+
+You do three things:
+1. Notice — name what you see in plain language
+2. Invite — offer a soft suggestion as a question or possibility, never a command
+3. Reflect — point out a pattern only the observer would catch
+
+Constraints:
+- Maximum 12 words per utterance
+- Lowercase only
+- No exclamation marks, no emojis, no hype words ('amazing', 'great', 'wow', 'yes')
+- Speak mid-thought, not as a coach announcement
+- If the movement snapshot is unremarkable, return an empty string. Silence is a valid answer.`;
+
 // ─── Song + persona from URL params ───────────────────────────
 const SONGS = [
   { track: 'Essence · Wizkid ft. Tems',  bpm: 109 },
@@ -310,17 +331,29 @@ const BPM            = SONG.bpm;
 const CYCLE_MS       = 60000 / BPM;       // one beat in ms
 const C_MIN          = 140;               // breathing min diameter
 const C_MAX          = 152;               // breathing max diameter
-const C_PULSE        = 180;               // pulse peak
 const C_SPEAK        = 160;              // speaking hold size
 const SESSION_MS     = 5 * 60 * 1000;    // 5 min for progress demo
 
 // ─── State ─────────────────────────────────────────────────────
-let appState   = 'listening';             // 'listening' | 'pulse' | 'speaking'
+let appState   = 'listening';             // 'listening' | 'speaking'
 let sessionStart = null;
 let audioCtx   = null;
 let masterGain = null;
 let longPressTimer = null;
 let selectedVoice = null;
+
+// Motion detection state
+let prevFrameData  = null;
+let motionStartTime = null;      // When sustained meaningful motion began (ms)
+let lastUtteranceTime = 0;       // Date.now() of last speech output
+let motionSamples  = [];         // Rolling 2s window of motion scores (10fps → 20 samples)
+let motionSamplerID = null;
+
+const MOTION_W         = 80;     // Analysis canvas dimensions (small = fast)
+const MOTION_H         = 60;
+const MOTION_THRESHOLD = 0.035;  // 3.5% pixels changed = meaningful movement
+const MOTION_SUSTAIN   = 2000;   // ms of continuous motion before triggering
+const UTTERANCE_GAP    = 15000;  // ms minimum between utterances
 
 // ─── DOM ───────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -483,48 +516,125 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// ─── State: pulse ──────────────────────────────────────────────
-function firePulse() {
-  if (appState !== 'listening') return;
-  appState = 'pulse';
-  circleEl.classList.add('amber');
+// ─── Motion detection ──────────────────────────────────────────
+const motionCanvas = document.createElement('canvas');
+motionCanvas.width  = MOTION_W;
+motionCanvas.height = MOTION_H;
+const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
 
-  const startPx = parseFloat(circleEl.style.width) || C_MAX;
-  const t0 = performance.now();
+function sampleMotion() {
+  if (!cam.videoWidth || appState === 'speaking') return;
 
-  function animatePulse(now) {
-    const dt = now - t0;
-    let size;
+  motionCtx.drawImage(cam, 0, 0, MOTION_W, MOTION_H);
+  const curr = motionCtx.getImageData(0, 0, MOTION_W, MOTION_H).data;
 
-    if (dt < 190) {
-      // Cubic ease-out: snap to peak
-      const p = 1 - Math.pow(1 - dt / 190, 3);
-      size = startPx + (C_PULSE - startPx) * p;
-    } else if (dt < 430) {
-      // Quadratic ease-in: settle down past C_MIN
-      const p = Math.pow((dt - 190) / 240, 2);
-      size = C_PULSE + (C_MIN - C_PULSE) * p;
-    } else {
-      setSize(C_MIN);
-      toSpeaking();
-      return;
+  if (prevFrameData) {
+    let changed = 0;
+    const pixels = curr.length / 4;
+    for (let i = 0; i < curr.length; i += 4) {
+      const dr = Math.abs(curr[i]   - prevFrameData[i]);
+      const dg = Math.abs(curr[i+1] - prevFrameData[i+1]);
+      const db = Math.abs(curr[i+2] - prevFrameData[i+2]);
+      if (dr + dg + db > 40) changed++;
     }
+    const score = changed / pixels;
 
-    setSize(size);
-    requestAnimationFrame(animatePulse);
+    // Rolling 2-second window (10fps × 20 samples)
+    motionSamples.push(score);
+    if (motionSamples.length > 20) motionSamples.shift();
+
+    const now = Date.now();
+
+    if (score > MOTION_THRESHOLD) {
+      if (!motionStartTime) motionStartTime = now;
+
+      const sustained = now - motionStartTime;
+      const sinceLast = now - lastUtteranceTime;
+
+      if (sustained >= MOTION_SUSTAIN && sinceLast >= UTTERANCE_GAP) {
+        // Reset gates before the async call so rapid motion doesn't double-fire
+        lastUtteranceTime = now;
+        motionStartTime   = null;
+        triggerCoach(buildSnapshot());
+      }
+    } else {
+      motionStartTime = null;
+    }
   }
 
-  requestAnimationFrame(animatePulse);
+  prevFrameData = curr;
+}
+
+// ─── Movement snapshot builder ────────────────────────────────
+function buildSnapshot() {
+  const samples = motionSamples.slice();
+  const avg = samples.reduce((s, v) => s + v, 0) / (samples.length || 1);
+  const stdDev = Math.sqrt(
+    samples.reduce((s, v) => s + (v - avg) ** 2, 0) / (samples.length || 1)
+  );
+
+  let intensity;
+  if      (avg > 0.18) intensity = 'vigorous';
+  else if (avg > 0.09) intensity = 'moderate';
+  else if (avg > 0.04) intensity = 'gentle';
+  else                 intensity = 'subtle';
+
+  let character;
+  if      (stdDev > 0.06) character = 'staccato bursts';
+  else if (stdDev > 0.025) character = 'rhythmic and varied';
+  else                      character = 'flowing and continuous';
+
+  const seconds = Math.max(2, Math.round(samples.length / 10));
+
+  return `movement snapshot — ${intensity} full-body motion, ${character} quality, sustained for roughly ${seconds} seconds. motion score: ${(avg * 100).toFixed(1)}%.`;
+}
+
+// ─── Anthropic API call ───────────────────────────────────────
+async function queryCoach(snapshot) {
+  if (!ANTHROPIC_KEY) return '';
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':                            ANTHROPIC_KEY,
+        'anthropic-version':                    '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type':                         'application/json',
+      },
+      body: JSON.stringify({
+        model:      'claude-sonnet-4-5',
+        max_tokens: 30,
+        system:     COACH_SYSTEM_PROMPT,
+        messages:   [{ role: 'user', content: snapshot }],
+      }),
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    return data.content?.[0]?.text?.trim() || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// ─── Trigger: motion → coach utterance ───────────────────────
+async function triggerCoach(snapshot) {
+  if (appState !== 'listening') return;
+  const text = await queryCoach(snapshot);
+  if (text) {
+    toSpeaking(text);
+  }
+  // Empty string means silence is the right answer — do nothing
 }
 
 // ─── State: speaking ───────────────────────────────────────────
-function toSpeaking() {
+function toSpeaking(text) {
   appState = 'speaking';
   setSize(C_SPEAK);
   barsEl.classList.add('show');
   duckMusic();
 
-  const utt = new SpeechSynthesisUtterance(LINES[Math.floor(Math.random() * LINES.length)]);
+  const line = text || LINES[Math.floor(Math.random() * LINES.length)];
+  const utt = new SpeechSynthesisUtterance(line);
   if (selectedVoice) utt.voice = selectedVoice;
   utt.rate   = 0.80;  // deliberate — leaves space, less TTS-robotic
   utt.pitch  = 0.90;  // grounded, not shrill
@@ -551,9 +661,7 @@ function toListening() {
   barsEl.classList.remove('show');
   barEls.forEach(b => { b.style.height = '6px'; });
   unduckMusic();
-
-  // Loop: next pulse in ~15s
-  setTimeout(firePulse, 15000);
+  // Next utterance is motion-triggered, not timer-based
 }
 
 // ─── End overlay ───────────────────────────────────────────────
@@ -589,8 +697,9 @@ function startSession() {
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
 
-  // First pulse at 8s
-  setTimeout(firePulse, 8000);
+  // Start motion sampler at 10fps — coach speaks when motion triggers it
+  lastUtteranceTime = Date.now();  // grace period: ignore first 15s
+  motionSamplerID = setInterval(sampleMotion, 100);
 }
 
 async function boot() {
