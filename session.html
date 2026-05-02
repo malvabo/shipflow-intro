@@ -4,15 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Session — AI Dance Partner</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
   :root {
     --bg: #0E0E10;
     --text-1: #F2EAD9;
-    --accent: #C8874A;
-    --spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --accent: #C8874A;  /* amber — voice only */
+    --track: #5A9E70;   /* green — tracking only */
   }
 
   html, body {
@@ -41,9 +41,11 @@
       0 48px 120px rgba(0,0,0,0.95);
     user-select: none;
     -webkit-user-select: none;
+    transition: background 1.4s ease;
   }
 
-  /* ── Full-screen on actual mobile ────────────────────── */
+  .phone.ended { background: #36363A; }
+
   @media (max-width: 500px) {
     html, body { background: var(--bg); }
     .phone {
@@ -68,6 +70,23 @@
     background: rgba(255,255,255,0.04);
     z-index: 5;
   }
+
+  /* ── Green tracking dot ──────────────────────────────── */
+  .track-dot {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--track);
+    box-shadow: 0 0 10px rgba(90,158,112,0.55);
+    pointer-events: none;
+    z-index: 8;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: left 0.12s ease, top 0.12s ease, opacity 0.4s ease;
+  }
+
+  .track-dot.active { opacity: 1; }
 
   /* ── Breathing circle ────────────────────────────────── */
   .circle {
@@ -111,7 +130,7 @@
     will-change: height;
   }
 
-  /* ── Bottom track info + progress ────────────────────── */
+  /* ── Track label + progress ──────────────────────────── */
   .bottom {
     position: absolute;
     bottom: 0;
@@ -139,15 +158,14 @@
 
   .progress-head {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 0; left: 0;
     height: 100%;
     width: 0%;
     background: rgba(255,255,255,0.52);
     transition: width 0.6s linear;
   }
 
-  /* ── End-session overlay ─────────────────────────────── */
+  /* ── End overlay — one option ────────────────────────── */
   .end-overlay {
     position: absolute;
     inset: 0;
@@ -155,20 +173,31 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.4s ease;
     z-index: 50;
   }
 
-  .end-overlay.show {
-    opacity: 1;
-    pointer-events: auto;
+  .end-overlay.show { opacity: 1; pointer-events: auto; }
+
+  .end-confirm {
+    padding: 14px 44px;
+    border-radius: 40px;
+    border: 1px solid rgba(242,234,217,0.22);
+    background: transparent;
+    color: rgba(242,234,217,0.88);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
+
+  .end-confirm:active { opacity: 0.6; }
 
   /* ── Tap hint ────────────────────────────────────────── */
   .tap-hint {
@@ -188,56 +217,18 @@
   }
 
   .tap-hint.show { opacity: 1; }
-  .tap-hint.hide { opacity: 0; }
-
-  .end-title {
-    font-family: 'DM Serif Display', serif;
-    font-size: 24px;
-    color: var(--text-1);
-    letter-spacing: 0.01em;
-    margin-bottom: 6px;
-  }
-
-  .end-sub {
-    font-size: 13px;
-    font-weight: 300;
-    color: rgba(242,234,217,0.40);
-    letter-spacing: 0.03em;
-    margin-bottom: 14px;
-  }
-
-  .end-confirm {
-    padding: 14px 44px;
-    border-radius: 40px;
-    border: 1px solid rgba(242,234,217,0.22);
-    background: transparent;
-    color: rgba(242,234,217,0.88);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 15px;
-    font-weight: 500;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .end-confirm:active { opacity: 0.6; }
-
-  .end-cancel {
-    font-size: 13px;
-    font-weight: 300;
-    color: rgba(242,234,217,0.30);
-    cursor: pointer;
-    padding: 10px 20px;
-    -webkit-tap-highlight-color: transparent;
-    letter-spacing: 0.02em;
-  }
 </style>
 </head>
 <body>
 
+<!-- hidden canvas for motion diff -->
+<canvas id="motionCanvas" width="80" height="120" style="display:none"></canvas>
+
 <div class="phone" id="phone">
 
   <video class="cam" id="cam" autoplay muted playsinline></video>
+
+  <div class="track-dot" id="trackDot"></div>
 
   <div class="circle" id="circle">
     <div class="bars" id="bars">
@@ -260,37 +251,31 @@
   <div class="tap-hint" id="tapHint">tap anywhere to begin</div>
 
   <div class="end-overlay" id="endOverlay">
-    <div class="end-title">End session?</div>
-    <div class="end-sub">Your practice is saved</div>
-    <button class="end-confirm" onclick="confirmEnd()">End session</button>
-    <div class="end-cancel" onclick="dismissEnd()">Keep going</div>
+    <button class="end-confirm" id="endBtn">End session</button>
   </div>
 
 </div>
 
 <script>
-// ─── Song + persona from URL params ───────────────────────────
+// ─── Songs & persona lines ─────────────────────────────────────
 const SONGS = [
-  { track: 'Essence · Wizkid ft. Tems',  bpm: 109 },
-  { track: 'Show Me Love · Robin S.',     bpm: 129 },
-  { track: 'Slow Motion · Trey Songz',   bpm: 72  },
+  { track: 'Essence · Wizkid ft. Tems', bpm: 109 },
+  { track: 'Show Me Love · Robin S.',   bpm: 129 },
+  { track: 'Slow Motion · Trey Songz',  bpm: 72  },
 ];
 const PERSONA_LINES = [
-  // calm collaborator
   [
     "Your weight is landing right on the downbeat.",
     "Let the pause before the drop build the tension.",
     "Your body already knows this chorus — let it lead.",
     "Feel the space between the notes. That's yours.",
   ],
-  // quiet observer
   [
     "Notice that.",
     "Your hips are ahead of the beat now.",
     "There.",
     "The transition — you felt it before it came.",
   ],
-  // encouraging hype
   [
     "Yes — that landing was clean.",
     "You're locking in. Keep going.",
@@ -299,28 +284,44 @@ const PERSONA_LINES = [
   ],
 ];
 
-const params   = new URLSearchParams(location.search);
-const songIdx  = Math.min(Math.max(parseInt(params.get('song')    ?? '2', 10), 0), 2);
-const persIdx  = Math.min(Math.max(parseInt(params.get('persona') ?? '0', 10), 0), 2);
-const SONG     = SONGS[songIdx];
-const LINES    = PERSONA_LINES[persIdx];
+const params  = new URLSearchParams(location.search);
+const songIdx = Math.min(Math.max(parseInt(params.get('song')    ?? '2', 10), 0), 2);
+const persIdx = Math.min(Math.max(parseInt(params.get('persona') ?? '0', 10), 0), 2);
+const SONG    = SONGS[songIdx];
+const LINES   = PERSONA_LINES[persIdx];
 
 // ─── Config ────────────────────────────────────────────────────
-const BPM            = SONG.bpm;
-const CYCLE_MS       = 60000 / BPM;       // one beat in ms
-const C_MIN          = 140;               // breathing min diameter
-const C_MAX          = 152;               // breathing max diameter
-const C_PULSE        = 180;               // pulse peak
-const C_SPEAK        = 160;              // speaking hold size
-const SESSION_MS     = 5 * 60 * 1000;    // 5 min for progress demo
+const BPM        = SONG.bpm;
+const CYCLE_MS   = 60000 / BPM;
+const C_MIN      = 140;
+const C_MAX      = 152;
+const C_PULSE    = 180;
+const C_SPEAK    = 160;
+const SESSION_MS = 5 * 60 * 1000;
+const GAP_MS     = 15000;   // min ms between utterances
+const LOOP_MS    = 60000;   // demo music loop cue at 60s
+const SILENCE_ON = 2;       // force empty return on Nth trigger (1-based)
+
+// Motion detection constants
+const M_W = 80, M_H = 120;
+const M_THRESH     = 28;
+const M_MIN_PIX    = 25;
 
 // ─── State ─────────────────────────────────────────────────────
-let appState   = 'listening';             // 'listening' | 'pulse' | 'speaking'
-let sessionStart = null;
-let audioCtx   = null;
-let masterGain = null;
-let longPressTimer = null;
+let appState      = 'listening'; // 'listening' | 'pulse' | 'speaking' | 'ended'
+let sessionStart  = null;        // set by first RAF tick
+let audioCtx      = null;
+let masterGain    = null;
 let selectedVoice = null;
+let sessionActive = false;       // true after first tap
+let lastSpeakTime = 0;
+let triggerCount  = 0;
+let prevFrameData = null;
+let dotTimeout    = null;
+let musicLooped   = false;
+let wakeLock      = null;
+let rafActive     = true;
+let longPressTimer = null;
 
 // ─── DOM ───────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -331,8 +332,11 @@ const barEls       = [...barsEl.querySelectorAll('.bar')];
 const progressHead = document.getElementById('progressHead');
 const endOverlay   = document.getElementById('endOverlay');
 const trackNameEl  = document.getElementById('trackName');
+const trackDot     = document.getElementById('trackDot');
+const tapHint      = document.getElementById('tapHint');
+const motionCanvas = document.getElementById('motionCanvas');
+const mCtx         = motionCanvas.getContext('2d');
 
-// Set track label from params
 trackNameEl.textContent = SONG.track;
 
 // ─── Circle sizing ─────────────────────────────────────────────
@@ -347,8 +351,11 @@ function initAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.42;
+  masterGain.gain.value = 0;
   masterGain.connect(audioCtx.destination);
+
+  // Fade in from silence
+  masterGain.gain.setTargetAtTime(0.42, audioCtx.currentTime, 0.6);
 
   // Ambient pad — four sine partials
   [[110, 0.06], [165, 0.04], [220, 0.028], [330, 0.015]].forEach(([freq, vol]) => {
@@ -363,8 +370,9 @@ function initAudio() {
   });
 
   // Kick drum at song BPM
-  const gap = 60000 / BPM;
+  const beatMs = 60000 / BPM;
   function kick() {
+    if (!audioCtx) return;
     const now = audioCtx.currentTime;
     const osc  = audioCtx.createOscillator();
     const env  = audioCtx.createGain();
@@ -379,14 +387,14 @@ function initAudio() {
     osc.stop(now + 0.20);
   }
   kick();
-  setInterval(kick, gap);
+  setInterval(kick, beatMs);
 }
 
 function duckMusic() {
   if (!masterGain) return;
   const now = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(now);
-  masterGain.gain.setTargetAtTime(0.42 * 0.7, now, 0.08);
+  masterGain.gain.setTargetAtTime(0.42 * 0.65, now, 0.08);
 }
 
 function unduckMusic() {
@@ -396,20 +404,22 @@ function unduckMusic() {
   masterGain.gain.setTargetAtTime(0.42, now, 0.35);
 }
 
+// Subtle volume dip at the 60s loop point — signals the demo loop restart
+function loopMusicCue() {
+  if (!masterGain || musicLooped) return;
+  musicLooped = true;
+  const now = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setTargetAtTime(0.05, now, 0.12);
+  masterGain.gain.setTargetAtTime(0.42, now + 0.65, 0.22);
+}
+
 // ─── Voice selection ───────────────────────────────────────────
-// Ranked by naturalness. Neural/Enhanced voices win over classic TTS.
 const VOICE_PRIORITY = [
-  'Samantha',                  // macOS — clean, warm, most natural default
-  'Ava (Enhanced)',            // macOS neural
-  'Allison (Enhanced)',        // macOS neural
-  'Google US English',         // Chrome neural
-  'Google UK English Female',  // Chrome
-  'Microsoft Aria Online',     // Edge neural
-  'Microsoft Jenny Online',    // Edge neural
-  'Microsoft Zira',            // Edge/Windows fallback
-  'Alex',                      // macOS classic — still better than generic
-  'Victoria',
-  'Karen',
+  'Samantha', 'Ava (Enhanced)', 'Allison (Enhanced)',
+  'Google US English', 'Google UK English Female',
+  'Microsoft Aria Online', 'Microsoft Jenny Online',
+  'Microsoft Zira', 'Alex', 'Victoria', 'Karen',
 ];
 
 function pickVoice() {
@@ -418,14 +428,10 @@ function pickVoice() {
     const match = voices.find(v => v.name.includes(name));
     if (match) return match;
   }
-  // Any English Enhanced voice
-  const enhanced = voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced'));
-  if (enhanced) return enhanced;
-  // Any en-US
-  const enUS = voices.find(v => v.lang === 'en-US');
-  if (enUS) return enUS;
-  // Any English
-  return voices.find(v => v.lang.startsWith('en')) || null;
+  return voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced'))
+      || voices.find(v => v.lang === 'en-US')
+      || voices.find(v => v.lang.startsWith('en'))
+      || null;
 }
 
 function loadVoices() {
@@ -437,7 +443,7 @@ function loadVoices() {
     try_();
     if (!selectedVoice) {
       speechSynthesis.onvoiceschanged = () => { selectedVoice = pickVoice(); resolve(); };
-      setTimeout(resolve, 1500); // don't block boot if voices never fire
+      setTimeout(resolve, 1500);
     }
   });
 }
@@ -452,25 +458,67 @@ async function initCamera() {
 
 // ─── Wake lock ─────────────────────────────────────────────────
 async function initWakeLock() {
-  try { await navigator.wakeLock.request('screen'); } catch (_) {}
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
 }
 
-// ─── Main RAF ──────────────────────────────────────────────────
+// ─── Motion detection ──────────────────────────────────────────
+function detectMotion() {
+  if (!cam.srcObject || cam.videoWidth === 0) return;
+
+  mCtx.drawImage(cam, 0, 0, M_W, M_H);
+  const { data } = mCtx.getImageData(0, 0, M_W, M_H);
+
+  if (!prevFrameData) { prevFrameData = data.slice(); return; }
+
+  let sumX = 0, sumY = 0, count = 0;
+
+  for (let y = 0; y < M_H; y++) {
+    for (let x = 0; x < M_W; x++) {
+      const i = (y * M_W + x) * 4;
+      const diff = Math.abs(data[i]   - prevFrameData[i])
+                 + Math.abs(data[i+1] - prevFrameData[i+1])
+                 + Math.abs(data[i+2] - prevFrameData[i+2]);
+      if (diff > M_THRESH) { sumX += x; sumY += y; count++; }
+    }
+  }
+
+  prevFrameData = data.slice();
+
+  if (count < M_MIN_PIX) return;
+
+  // Map centroid to phone coords — mirror x to match the flipped video
+  const cx = (1 - sumX / count / M_W) * 350 + 20;
+  const cy = (sumY / count / M_H) * 760 + 42;
+
+  trackDot.style.left = cx + 'px';
+  trackDot.style.top  = cy + 'px';
+  trackDot.classList.add('active');
+
+  // Hide dot briefly after motion stops
+  clearTimeout(dotTimeout);
+  dotTimeout = setTimeout(() => trackDot.classList.remove('active'), 900);
+
+  // Trigger utterance: session must be active, state must be listening, gap respected
+  const now = Date.now();
+  if (sessionActive && appState === 'listening' && (now - lastSpeakTime) >= GAP_MS) {
+    lastSpeakTime = now;
+    firePulse();
+  }
+}
+
+// ─── Main RAF loop ─────────────────────────────────────────────
 function frame(now) {
+  if (!rafActive) return;
   if (!sessionStart) sessionStart = now;
   const elapsed = now - sessionStart;
 
-  // Progress hairline
   progressHead.style.width = Math.min(elapsed / SESSION_MS * 100, 100) + '%';
 
-  // Breathing (listening only — pulse has its own RAF)
   if (appState === 'listening') {
     const phase = (elapsed % CYCLE_MS) / CYCLE_MS * Math.PI * 2 - Math.PI / 2;
-    const t     = (Math.sin(phase) + 1) * 0.5;
-    setSize(C_MIN + (C_MAX - C_MIN) * t);
+    setSize(C_MIN + (C_MAX - C_MIN) * (Math.sin(phase) + 1) * 0.5);
   }
 
-  // Waveform bars (speaking only)
   if (appState === 'speaking') {
     const t = now / 1000;
     barEls.forEach((bar, i) => {
@@ -480,6 +528,9 @@ function frame(now) {
     });
   }
 
+  // 60s loop cue
+  if (sessionActive && !musicLooped && elapsed >= LOOP_MS) loopMusicCue();
+
   requestAnimationFrame(frame);
 }
 
@@ -487,6 +538,7 @@ function frame(now) {
 function firePulse() {
   if (appState !== 'listening') return;
   appState = 'pulse';
+  triggerCount++;
   circleEl.classList.add('amber');
 
   const startPx = parseFloat(circleEl.style.width) || C_MAX;
@@ -495,21 +547,16 @@ function firePulse() {
   function animatePulse(now) {
     const dt = now - t0;
     let size;
-
     if (dt < 190) {
-      // Cubic ease-out: snap to peak
-      const p = 1 - Math.pow(1 - dt / 190, 3);
-      size = startPx + (C_PULSE - startPx) * p;
+      size = startPx + (C_PULSE - startPx) * (1 - Math.pow(1 - dt / 190, 3));
     } else if (dt < 430) {
-      // Quadratic ease-in: settle down past C_MIN
-      const p = Math.pow((dt - 190) / 240, 2);
-      size = C_PULSE + (C_MIN - C_PULSE) * p;
+      size = C_PULSE + (C_MIN - C_PULSE) * Math.pow((dt - 190) / 240, 2);
     } else {
       setSize(C_MIN);
-      toSpeaking();
+      if (triggerCount === SILENCE_ON) toSilence();
+      else toSpeaking();
       return;
     }
-
     setSize(size);
     requestAnimationFrame(animatePulse);
   }
@@ -526,22 +573,25 @@ function toSpeaking() {
 
   const utt = new SpeechSynthesisUtterance(LINES[Math.floor(Math.random() * LINES.length)]);
   if (selectedVoice) utt.voice = selectedVoice;
-  utt.rate   = 0.80;  // deliberate — leaves space, less TTS-robotic
-  utt.pitch  = 0.90;  // grounded, not shrill
+  utt.rate   = 0.80;
+  utt.pitch  = 0.90;
   utt.volume = 0.92;
 
   let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    toListening();
-  };
-
+  const finish = () => { if (done) return; done = true; toListening(); };
   utt.onend = finish;
-  setTimeout(finish, 5500); // safety
+  setTimeout(finish, 5500);
 
   speechSynthesis.cancel();
   speechSynthesis.speak(utt);
+}
+
+// ─── State: silence (empty-string return) ──────────────────────
+// Circle briefly amber — AI observed, chose not to speak
+function toSilence() {
+  appState = 'speaking'; // block re-triggers during hold
+  // No bars, no speech, no duck — the quiet is the moment
+  setTimeout(toListening, 1800);
 }
 
 // ─── State: listening ──────────────────────────────────────────
@@ -551,33 +601,67 @@ function toListening() {
   barsEl.classList.remove('show');
   barEls.forEach(b => { b.style.height = '6px'; });
   unduckMusic();
-
-  // Loop: next pulse in ~15s
-  setTimeout(firePulse, 15000);
+  lastSpeakTime = Date.now(); // start gap timer from now
 }
 
 // ─── End overlay ───────────────────────────────────────────────
 function showEnd()    { endOverlay.classList.add('show'); }
 function dismissEnd() { endOverlay.classList.remove('show'); }
-function confirmEnd() { dismissEnd(); }
 
-// Long-press 1.5s → end overlay (no short taps do anything)
-phone.addEventListener('mousedown',  () => { longPressTimer = setTimeout(showEnd, 1500); });
-phone.addEventListener('mouseup',    () => clearTimeout(longPressTimer));
-phone.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
-phone.addEventListener('touchstart', () => { longPressTimer = setTimeout(showEnd, 1500); }, { passive: true });
-phone.addEventListener('touchend',   () => clearTimeout(longPressTimer));
-phone.addEventListener('touchmove',  () => clearTimeout(longPressTimer), { passive: true });
+function confirmEnd() {
+  endOverlay.classList.remove('show');
+  sessionActive = false;
+  appState = 'ended';
+  rafActive = false;
+
+  // Fade screen to charcoal
+  phone.classList.add('ended');
+
+  // Stop audio
+  speechSynthesis.cancel();
+  if (masterGain && audioCtx) {
+    const now = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.setTargetAtTime(0, now, 0.35);
+    setTimeout(() => { try { audioCtx.close(); } catch (_) {} audioCtx = null; masterGain = null; }, 1800);
+  }
+
+  // Stop camera
+  if (cam.srcObject) {
+    cam.srcObject.getTracks().forEach(t => t.stop());
+    cam.srcObject = null;
+  }
+
+  // Release wake lock
+  if (wakeLock) { try { wakeLock.release(); } catch (_) {} wakeLock = null; }
+
+  // Navigate back to home after the fade settles
+  setTimeout(() => { window.location.href = 'metoo.html'; }, 1500);
+}
+
+// Tap overlay background (not the button) to dismiss
+endOverlay.addEventListener('click', e => { if (e.target === endOverlay) dismissEnd(); });
+document.getElementById('endBtn').addEventListener('click', confirmEnd);
+
+// Long-press 1.5s → reveal overlay
+function startLongPress() { longPressTimer = setTimeout(showEnd, 1500); }
+function cancelLongPress() { clearTimeout(longPressTimer); }
+
+phone.addEventListener('mousedown',  startLongPress);
+phone.addEventListener('mouseup',    cancelLongPress);
+phone.addEventListener('mouseleave', cancelLongPress);
+phone.addEventListener('touchstart', startLongPress, { passive: true });
+phone.addEventListener('touchend',   cancelLongPress);
+phone.addEventListener('touchmove',  cancelLongPress, { passive: true });
 
 // ─── Boot ──────────────────────────────────────────────────────
-const tapHint = document.getElementById('tapHint');
 let sessionStarted = false;
 
 function startSession() {
   if (sessionStarted) return;
   sessionStarted = true;
 
-  // Prime speech synthesis inside the gesture (iOS WebKit requires this)
+  // Prime speech synthesis inside user gesture (required on iOS WebKit)
   const prime = new SpeechSynthesisUtterance(' ');
   prime.volume = 0;
   prime.rate   = 10;
@@ -585,24 +669,30 @@ function startSession() {
 
   initAudio();
 
-  // Hide hint
-  tapHint.classList.remove('show');
-  tapHint.classList.add('hide');
+  tapHint.style.opacity = '0';
+  setTimeout(() => { tapHint.style.display = 'none'; }, 800);
 
-  // First pulse at 8s
-  setTimeout(firePulse, 8000);
+  sessionActive = true;
+  // Allow first motion trigger after ~6s (not immediately)
+  lastSpeakTime = Date.now() - (GAP_MS - 6000);
 }
 
 async function boot() {
+  // Camera and voices load immediately — no gesture needed
   await Promise.all([initCamera(), loadVoices()]);
   initWakeLock();
   try { await screen.orientation.lock('portrait'); } catch (_) {}
 
+  // Breathing starts now
   requestAnimationFrame(frame);
 
-  // Show tap hint after a beat
+  // Motion detection at ~10 fps
+  setInterval(detectMotion, 100);
+
+  // Tap hint appears after a beat
   setTimeout(() => tapHint.classList.add('show'), 800);
 
+  // Audio + session activate on first tap
   document.addEventListener('click',      startSession, { once: true });
   document.addEventListener('touchstart', startSession, { once: true, passive: true });
 }

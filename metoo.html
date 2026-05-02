@@ -128,14 +128,66 @@
       display: flex; flex-direction: column;
     }
 
-    /* Step 1: song picker */
-    .step-1 {
+    /* Step 0: landing */
+    .step-0 {
       opacity: 1; transform: translateY(0);
+      align-items: center; justify-content: center;
+      padding: 0 36px; gap: 0;
       transition: opacity 0.4s ease, transform 0.4s var(--spring);
+    }
+    .step-0.out {
+      opacity: 0; transform: translateY(-18px);
+      pointer-events: none;
+    }
+
+    .landing-title {
+      font-family: var(--serif);
+      font-size: 36px; font-weight: 400;
+      color: var(--text-1);
+      text-align: center;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+    }
+    .landing-sub {
+      font-size: 13px; font-weight: 300;
+      color: var(--text-2);
+      text-align: center;
+      line-height: 1.7;
+      letter-spacing: 0.005em;
+      margin-bottom: 52px;
+    }
+    .start-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #1A130E;
+      border: none;
+      border-radius: 9999px;
+      padding: 17px;
+      font-family: var(--sans);
+      font-size: 15px; font-weight: 500;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 8px 36px rgba(200,135,74,0.28);
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .start-btn:active { opacity: 0.78; transform: scale(0.977); }
+
+    /* Step 1: song picker — starts hidden, revealed after landing */
+    .step-1 {
+      opacity: 0; transform: translateY(24px);
+      pointer-events: none;
+      transition: opacity 0.5s ease 0.18s, transform 0.5s var(--spring) 0.18s;
+    }
+    .step-1.in {
+      opacity: 1; transform: translateY(0);
+      pointer-events: auto;
     }
     .step-1.out {
       opacity: 0; transform: translateY(-18px);
       pointer-events: none;
+      transition: opacity 0.4s ease, transform 0.4s var(--spring);
     }
 
     /* Step 2: persona picker */
@@ -340,6 +392,14 @@
     <!-- ═══ CONTENT WRAP ═══════════════════════════════════ -->
     <div class="content-wrap">
 
+      <!-- ── STEP 0 · Landing ─────────────────────────── -->
+      <div class="step step-0" id="step0">
+        <div class="landing-title">your AI<br>dance partner</div>
+        <div class="landing-sub">move freely — it watches, waits,<br>and speaks when something's worth saying</div>
+        <button class="start-btn" id="startBtn">Start session</button>
+      </div>
+      <!-- /step 0 -->
+
       <!-- ── STEP 1 · Song picker ──────────────────────── -->
       <div class="step step-1" id="step1">
 
@@ -492,7 +552,7 @@
   const camDot     = document.getElementById('camDot');
 
   /* ─── State ───────────────────────────────────────────── */
-  let phase        = 'song';
+  let phase        = 'landing'; // 'landing' | 'song' | 'persona'
   let handVisible  = false;
   let handLostTmr  = null;
   let palmCooldown = false;
@@ -640,11 +700,23 @@
 
   loop();
 
+  /* ─── Landing → song picker ──────────────────────────── */
+  document.getElementById('startBtn').addEventListener('click', () => {
+    const step0 = document.getElementById('step0');
+    step0.classList.add('out');
+    setTimeout(() => {
+      phase        = 'song';
+      palmCooldown = true;
+      step1.classList.add('in');
+      setTimeout(() => { palmCooldown = false; }, COOLDOWN);
+    }, 280);
+  });
+
   /* ─── Swipe / touch ───────────────────────────────────── */
   let tx0 = null;
   document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive: true });
   document.addEventListener('touchend', e => {
-    if (tx0 === null) return;
+    if (tx0 === null || phase === 'landing') return;
     const dx = e.changedTouches[0].clientX - tx0;
     if (Math.abs(dx) > 36) {
       const dir = dx < 0 ? 1 : -1;
@@ -708,6 +780,7 @@
   }
 
   function onHands(results) {
+    if (phase === 'landing') return;
     if (results.multiHandLandmarks?.length > 0) {
       const lm = results.multiHandLandmarks[0];
       const x  = clamp(1 - lm[0].x, 0.04, 0.96);
