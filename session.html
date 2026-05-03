@@ -327,8 +327,8 @@ const LOOP_MS    = 60000;  // subtle audio dip at 60s
 // Motion detection
 const M_W       = 80;
 const M_H       = 120;
-const M_THRESH  = 28;   // per-pixel rgb delta threshold
-const M_MIN_PIX = 25;   // min changed pixels to count as motion
+const M_THRESH  = 10;   // per-pixel rgb delta threshold
+const M_MIN_PIX = 8;    // min changed pixels to count as motion
 
 // ── State ──────────────────────────────────────────────────────
 let appState      = 'listening'; // 'listening' | 'speaking' | 'ended'
@@ -524,7 +524,7 @@ function frame(now) {
 
 // ── Motion detection ───────────────────────────────────────────
 function detectMotion() {
-  if (!cam.srcObject || cam.videoWidth === 0) return;
+  if (!cam.srcObject || cam.videoWidth === 0 || cam.readyState < 2) return;
 
   mCtx.drawImage(cam, 0, 0, M_W, M_H);
   const { data } = mCtx.getImageData(0, 0, M_W, M_H);
