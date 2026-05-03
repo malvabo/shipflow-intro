@@ -478,6 +478,12 @@ async function initCamera() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
     cam.srcObject = stream;
+    // Wait until the video element actually has frame data before starting motion diff
+    await new Promise(r => {
+      if (cam.readyState >= 2) { r(); return; }
+      cam.addEventListener('loadeddata', r, { once: true });
+      setTimeout(r, 4000); // fallback — never block indefinitely
+    });
   } catch (_) {}
 }
 
@@ -524,10 +530,15 @@ function frame(now) {
 
 // ── Motion detection ───────────────────────────────────────────
 function detectMotion() {
-  if (!cam.srcObject || cam.videoWidth === 0 || cam.readyState < 2) return;
-
-  mCtx.drawImage(cam, 0, 0, M_W, M_H);
-  const { data } = mCtx.getImageData(0, 0, M_W, M_H);
+  if (!cam.srcObject) return;
+  let data;
+  try {
+    mCtx.drawImage(cam, 0, 0, M_W, M_H);
+    data = mCtx.getImageData(0, 0, M_W, M_H).data;
+  } catch (_) {
+    prevFrameData = null; // reset so next good frame initialises cleanly
+    return;
+  }
 
   if (!prevFrameData) { prevFrameData = data.slice(); return; }
 
@@ -821,12 +832,10 @@ function startSession() {
 }
 
 async function boot() {
-  // Camera is fire-and-forget — a stalled permission prompt must not block
-  // tap-listener registration, otherwise the gesture that primes speech
-  // never reaches the page. Wake-lock moves into startSession (Safari
-  // requires user activation).
-  initCamera();
-  await loadVoices();
+  // initCamera is awaited so the motion-detection interval only starts once
+  // the video element has real frame data (loadeddata event or 4s fallback).
+  // loadVoices runs in parallel so voices are ready when speech is needed.
+  const [_cam] = await Promise.all([initCamera(), loadVoices()]);
   try { await screen.orientation.lock('portrait'); } catch (_) {}
 
   requestAnimationFrame(frame);
