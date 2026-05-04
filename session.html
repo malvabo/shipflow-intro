@@ -272,9 +272,10 @@
 // window.ANTHROPIC_KEY       = 'sk-ant-...';
 // window.ELEVENLABS_KEY      = '...';    // optional; falls back to Web Speech
 // window.ELEVENLABS_VOICE_ID = '...';    // optional; defaults to Rachel
-const ANTHROPIC_KEY    = window.ANTHROPIC_KEY    || '';
-const ELEVENLABS_KEY   = window.ELEVENLABS_KEY   || '';
-const ELEVENLABS_VOICE = window.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+// Set from console: localStorage.setItem('ANTHROPIC_KEY', 'sk-ant-...')
+const ANTHROPIC_KEY    = window.ANTHROPIC_KEY    || localStorage.getItem('ANTHROPIC_KEY')    || '';
+const ELEVENLABS_KEY   = window.ELEVENLABS_KEY   || localStorage.getItem('ELEVENLABS_KEY')   || '';
+const ELEVENLABS_VOICE = window.ELEVENLABS_VOICE_ID || localStorage.getItem('ELEVENLABS_VOICE_ID') || '21m00Tcm4TlvDq8ikWAM';
 
 // ── Reflective coach system prompt ─────────────────────────────
 const COACH_SYSTEM_PROMPT = `You are a quiet, observant movement coach watching someone dance freely in their own space. You are not a fitness app. You are not enthusiastic. You speak rarely, only when you genuinely notice something worth naming. Your voice is warm, low, and intimate — the way a trusted friend might speak in a quiet room.
@@ -375,6 +376,7 @@ function setSize(px) {
 function initAudio() {
   if (audioCtx) return;
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume().catch(() => {});
 
   masterGain = audioCtx.createGain();
   masterGain.gain.value = 0;
