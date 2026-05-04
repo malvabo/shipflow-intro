@@ -6,9 +6,6 @@
   <title>MeToo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Serif+Display&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-
   <style>
     /* ─── TOKENS ─────────────────────────────────────────── */
     :root {
@@ -59,59 +56,10 @@
     .screen {
       width: 100%; height: 100%;
       display: flex; flex-direction: column;
-      padding: 52px 0 36px;
+      padding: 36px 0 36px;
       position: relative;
       overflow: hidden;
     }
-
-    /* ─── CAMERA PIP ─────────────────────────────────────── */
-    .cam-pip {
-      position: absolute; top: 18px; right: 20px;
-      width: 60px; height: 60px;
-      border-radius: 50%; overflow: hidden;
-      border: 1.5px solid var(--border);
-      background: var(--surface-2);
-      z-index: 100;
-      opacity: 0; transform: scale(0.85);
-      transition: opacity 0.5s ease, transform 0.5s var(--spring);
-    }
-    .cam-pip.on { opacity: 1; transform: scale(1); }
-    #camVideo {
-      width: 100%; height: 100%;
-      object-fit: cover; transform: scaleX(-1); display: block;
-    }
-    .cam-dot {
-      position: absolute; bottom: 5px; right: 5px;
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--text-3); border: 1.5px solid var(--bg);
-      transition: background 0.4s ease;
-    }
-    .cam-dot.live { background: var(--accent); }
-
-    /* ─── HAND RAIL (fixed, above both steps) ────────────── */
-    .rail-wrap {
-      padding: 0 28px;
-      height: 20px;
-      display: flex; align-items: center;
-      margin-bottom: 4px;
-      flex-shrink: 0;
-      position: relative; z-index: 10;
-    }
-    .rail {
-      flex: 1; height: 1.5px;
-      background: var(--surface-2); border-radius: 2px;
-      position: relative;
-    }
-    .rail-thumb {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px 2px var(--accent-dim);
-      opacity: 0;
-      transition: left 0.06s linear, opacity 0.3s ease;
-    }
-    .rail-thumb.on { opacity: 1; }
 
     /* ─── CONTENT WRAP (steps live here) ─────────────────── */
     .content-wrap {
@@ -476,19 +424,6 @@
 <div class="viewport">
   <div class="screen">
 
-    <!-- Camera PIP (floats above both steps) -->
-    <div class="cam-pip" id="camPip">
-      <video id="camVideo" autoplay playsinline muted></video>
-      <div class="cam-dot" id="camDot"></div>
-    </div>
-
-    <!-- Hand rail (fixed above both steps) -->
-    <div class="rail-wrap">
-      <div class="rail">
-        <div class="rail-thumb" id="railThumb"></div>
-      </div>
-    </div>
-
     <!-- ═══ CONTENT WRAP ═══════════════════════════════════ -->
     <div class="content-wrap">
 
@@ -663,9 +598,7 @@
   const N        = 3;
   const SPREAD   = 222;
   const CIRC     = 81.68;   // 2π × 13
-  const PALM_MIN = 0.52;
-  const PALM_MAX = 0.86;
-  const COOLDOWN = 1400;    // ms palm lockout after step transition
+  const COOLDOWN = 1400;    // ms lockout after step transition
 
   /* ─── DOM ─────────────────────────────────────────────── */
   const sCARDS = [0,1,2].map(i => document.getElementById(`sc${i}`));
@@ -675,42 +608,22 @@
   const pFILLS = [0,1,2].map(i => document.getElementById(`pf${i}`));
   const pDOTS  = [0,1,2].map(i => document.getElementById(`pd${i}`));
 
-  const railThumb  = document.getElementById('railThumb');
   const step1      = document.getElementById('step1');
   const step2      = document.getElementById('step2');
   const recapGenre = document.getElementById('recapGenre');
   const recapTrack = document.getElementById('recapTrack');
   const beginBtn   = document.getElementById('beginBtn');
-  const camPip     = document.getElementById('camPip');
-  const camDot     = document.getElementById('camDot');
 
   /* ─── State ───────────────────────────────────────────── */
   let phase        = 'landing'; // 'landing' | 'song' | 'persona'
-  let handVisible  = false;
-  let handLostTmr  = null;
   let palmCooldown = false;
 
   let sActive = 1, sFloat = 1, sChosen = null;
-  let sPalmRaw = 0, sPalmSmooth = 0;
-
   let pActive = 1, pFloat = 1, pChosen = null;
-  let pPalmRaw = 0, pPalmSmooth = 0;
 
   /* ─── Helpers ─────────────────────────────────────────── */
   const lerp  = (a, b, t) => a + (b - a) * t;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const d2    = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-
-  /* ─── Palm spread → 0..1 ──────────────────────────────── */
-  function palmIntensity(lm) {
-    const scale = d2(lm[0], lm[9]);
-    if (scale < 0.015) return 0;
-    const cx = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
-    const cy = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
-    const c  = { x: cx, y: cy };
-    const avg = [4,8,12,16,20].reduce((s, i) => s + d2(lm[i], c), 0) / 5;
-    return clamp((avg / scale - PALM_MIN) / (PALM_MAX - PALM_MIN), 0, 1);
-  }
 
   /* ─── Spatial card layout (shared) ───────────────────── */
   function layout(cards, fi) {
@@ -736,22 +649,6 @@
     pCARDS.forEach((c, i) => c.classList.toggle('selected', i === pActive && pChosen === null));
     pDOTS.forEach((d, i)  => d.classList.toggle('on', i === pActive));
     if (reset) { pPalmRaw = 0; pPalmSmooth = 0; }
-  }
-
-  /* ─── Palm glow on active card ────────────────────────── */
-  function applyGlow(cards, fills, idx, t) {
-    fills.forEach((f, i) => {
-      f.style.strokeDashoffset = i === idx ? CIRC * (1 - t) : CIRC;
-    });
-    cards.forEach((c, i) => {
-      if (i === idx) {
-        c.style.borderColor = `rgba(200,135,74,${0.18 + t * 0.45})`;
-        c.style.boxShadow   = `0 0 ${t * 28}px rgba(200,135,74,${t * 0.44})`;
-      } else {
-        c.style.borderColor = '';
-        c.style.boxShadow   = '';
-      }
-    });
   }
 
   /* ─── Confirm song → transition to step 2 ────────────── */
@@ -803,31 +700,15 @@
     beginBtn.classList.add('ready');
   }
 
-  /* ─── RAF loop ────────────────────────────────────────── */
+  /* ─── RAF loop (layout only) ──────────────────────────── */
   function loop() {
     if (phase === 'song') {
-      const lerpT = sPalmRaw > sPalmSmooth ? 0.22 : 0.10;
-      sPalmSmooth = lerp(sPalmSmooth, sPalmRaw, lerpT);
-      if (!handVisible) sPalmRaw = lerp(sPalmRaw, 0, 0.12);
-
-      if (sChosen === null) applyGlow(sCARDS, sFILLS, sActive, sPalmSmooth);
-      if (sPalmSmooth > 0.995 && sChosen === null) confirmSong(sActive);
-
       sFloat = lerp(sFloat, sActive, 0.1);
       layout(sCARDS, sFloat);
-
     } else if (!palmCooldown) {
-      const lerpT = pPalmRaw > pPalmSmooth ? 0.22 : 0.10;
-      pPalmSmooth = lerp(pPalmSmooth, pPalmRaw, lerpT);
-      if (!handVisible) pPalmRaw = lerp(pPalmRaw, 0, 0.12);
-
-      if (pChosen === null) applyGlow(pCARDS, pFILLS, pActive, pPalmSmooth);
-      if (pPalmSmooth > 0.995 && pChosen === null) confirmPersona(pActive);
-
       pFloat = lerp(pFloat, pActive, 0.1);
       layout(pCARDS, pFloat);
     }
-
     requestAnimationFrame(loop);
   }
 
@@ -882,70 +763,6 @@
       window.location.href = `session.html?song=${sChosen}&persona=${pChosen}`;
     }, 400);
   });
-
-  /* ─── MediaPipe Hands ────────────────────────────────── */
-  async function startCamera() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }
-      });
-      const vid = document.getElementById('camVideo');
-      vid.srcObject = stream;
-      await new Promise(r => { vid.onloadedmetadata = r; });
-      camPip.classList.add('on');
-
-      const hands = new Hands({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-      });
-      hands.setOptions({
-        maxNumHands: 1, modelComplexity: 0,
-        minDetectionConfidence: 0.72, minTrackingConfidence: 0.6
-      });
-      hands.onResults(onHands);
-
-      new Camera(vid, {
-        onFrame: async () => { await hands.send({ image: vid }); },
-        width: 320, height: 240
-      }).start();
-
-      camDot.classList.add('live');
-    } catch (_) { /* swipe-only mode */ }
-  }
-
-  function onHands(results) {
-    if (phase === 'landing') return;
-    if (results.multiHandLandmarks?.length > 0) {
-      const lm = results.multiHandLandmarks[0];
-      const x  = clamp(1 - lm[0].x, 0.04, 0.96);
-
-      railThumb.style.left = `${x * 100}%`;
-      railThumb.classList.add('on');
-
-      const target = Math.round(x * (N - 1));
-
-      if (phase === 'song') {
-        if (target !== sActive) activateSong(target);
-        sPalmRaw = sChosen === null ? palmIntensity(lm) : 0;
-      } else if (!palmCooldown) {
-        if (target !== pActive) activatePersona(target);
-        pPalmRaw = pChosen === null ? palmIntensity(lm) : 0;
-      }
-
-      handVisible = true;
-      if (handLostTmr) { clearTimeout(handLostTmr); handLostTmr = null; }
-
-    } else {
-      if (!handLostTmr) {
-        handLostTmr = setTimeout(() => {
-          handVisible = false;
-          railThumb.classList.remove('on');
-          handLostTmr = null;
-        }, 600);
-      }
-    }
-  }
-
-  setTimeout(startCamera, 400);
 
   /* ─── Settings ────────────────────────────────────────── */
   const settingsSheet    = document.getElementById('settingsSheet');
