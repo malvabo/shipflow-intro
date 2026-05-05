@@ -751,9 +751,9 @@
   /* Begin */
   beginBtn.addEventListener('click', () => {
     if (!beginBtn.classList.contains('ready')) return;
+    beginBtn.disabled = true;
     beginBtn.textContent = 'Starting…';
     beginBtn.style.opacity = '0.55';
-    beginBtn.style.cursor  = 'default';
     setTimeout(() => {
       window.location.href = `session.html?song=${sChosen}&persona=${pChosen}`;
     }, 400);
@@ -797,10 +797,9 @@
   document.getElementById('settingsClear').addEventListener('click', () => {
     localStorage.removeItem('ANTHROPIC_KEY');
     localStorage.removeItem('ELEVENLABS_KEY');
-    anthropicInput.placeholder = 'sk-ant-...';
-    elevenInput.placeholder    = 'API key...';
     anthropicStatus.textContent = '';
     elevenStatus.textContent    = '';
+    closeSettings();
   });
 
   /* ─── Init ────────────────────────────────────────────── */

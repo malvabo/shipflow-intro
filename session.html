@@ -301,7 +301,7 @@ function paramIdx(name, def, max) {
   return Number.isFinite(n) ? Math.min(Math.max(n, 0), max) : def;
 }
 const songIdx = paramIdx('song',    2, SONGS.length - 1);
-const persIdx = paramIdx('persona', 0, PERSONA_LINES.length - 1);
+const persIdx = paramIdx('persona', 0, PERSONA_NAMES.length - 1);
 const SONG    = SONGS[songIdx];
 
 // ── Config ─────────────────────────────────────────────────────
@@ -340,6 +340,7 @@ let musicLooped   = false;
 let wakeLock      = null;
 let rafActive     = true;
 let longPressTimer = null;
+let kickInterval   = null;
 
 // ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -402,25 +403,25 @@ function initAudio() {
     osc.stop(t + 0.20);
   }
   kick();
-  setInterval(kick, beatMs);
+  kickInterval = setInterval(kick, beatMs);
 }
 
 function duckMusic() {
-  if (!masterGain) return;
+  if (!masterGain || !audioCtx) return;
   const t = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(t);
   masterGain.gain.setTargetAtTime(0.42 * 0.30, t, 0.08);
 }
 
 function unduckMusic() {
-  if (!masterGain) return;
+  if (!masterGain || !audioCtx) return;
   const t = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(t);
   masterGain.gain.setTargetAtTime(0.42, t, 0.35);
 }
 
 function loopMusicCue() {
-  if (!masterGain || musicLooped) return;
+  if (!masterGain || !audioCtx || musicLooped) return;
   musicLooped = true;
   const t = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(t);
@@ -557,9 +558,9 @@ function detectMotion() {
 
   if (count < M_MIN_PIX) return;
 
-  // Green tracking dot — mirror x to match flipped video
-  const cx = (1 - sumX / count / M_W) * 350 + 20;
-  const cy = (sumY / count / M_H) * 760 + 42;
+  // Green tracking dot — mirror x to match flipped video, scale to actual viewport
+  const cx = (1 - sumX / count / M_W) * phone.clientWidth;
+  const cy = (sumY / count / M_H) * phone.clientHeight;
   trackDot.style.left = cx + 'px';
   trackDot.style.top  = cy + 'px';
   trackDot.classList.add('active');
@@ -609,6 +610,7 @@ async function queryCoach(snapshot) {
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: {
         'x-api-key':                                 ANTHROPIC_KEY,
         'anthropic-version':                         '2023-06-01',
@@ -778,6 +780,7 @@ function confirmEnd() {
   rafActive = false;
   phone.classList.add('ended');
 
+  clearInterval(kickInterval); kickInterval = null;
   speechSynthesis.cancel();
   if (masterGain && audioCtx) {
     const t = audioCtx.currentTime;
