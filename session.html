@@ -830,22 +830,18 @@ function startSession() {
   lastSpeakTime = Date.now() - (GAP_MS - 6000); // first utterance possible after 6s
 }
 
-async function boot() {
-  // Register tap listeners FIRST — must not be blocked by async camera/voice init
-  setTimeout(() => tapHint.classList.add('show'), 800);
-  document.addEventListener('click',      startSession, { once: true });
-  document.addEventListener('touchstart', startSession, { once: true, passive: true });
+// Tap listeners registered synchronously — no async path can block them
+setTimeout(() => tapHint.classList.add('show'), 800);
+document.addEventListener('click',      startSession, { once: true });
+document.addEventListener('touchstart', startSession, { once: true, passive: true });
+requestAnimationFrame(frame);
 
-  requestAnimationFrame(frame);
-
-  // Camera and voices load in parallel; motion detection starts once camera is ready
-  try { await Promise.all([initCamera(), loadVoices()]); } catch (_) {}
-  try { await screen.orientation.lock('portrait'); } catch (_) {}
-
-  setInterval(detectMotion, 100);
-}
-
-boot();
+// Camera + voice load in the background; motion detection starts when camera is ready
+initCamera()
+  .then(() => setInterval(detectMotion, 100))
+  .catch(() => setInterval(detectMotion, 100));
+loadVoices().catch(() => {});
+try { screen.orientation.lock('portrait').catch(() => {}); } catch (_) {}
 </script>
 </body>
 </html>
