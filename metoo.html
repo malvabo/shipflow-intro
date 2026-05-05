@@ -6,9 +6,6 @@
   <title>MeToo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Serif+Display&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-
   <style>
     /* ─── TOKENS ─────────────────────────────────────────── */
     :root {
@@ -40,78 +37,24 @@
       overscroll-behavior: none;
     }
 
+    html, body { background: var(--bg); }
+
     /* ─── PHONE FRAME ────────────────────────────────────── */
     .viewport {
-      width: 375px; height: 812px;
+      width: 100vw; height: 100dvh;
       background: var(--bg);
-      border-radius: 50px;
       overflow: hidden;
       position: relative;
-      border: 1.5px solid rgba(255,255,255,0.06);
-      box-shadow: 0 0 0 10px #0C0906, 0 64px 140px rgba(0,0,0,0.82);
-    }
-    @media (max-width: 420px) {
-      .viewport { width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none; }
-      html, body { background: var(--bg); }
     }
 
     /* ─── SCREEN ─────────────────────────────────────────── */
     .screen {
       width: 100%; height: 100%;
       display: flex; flex-direction: column;
-      padding: 52px 0 36px;
+      padding: 36px 0 36px;
       position: relative;
       overflow: hidden;
     }
-
-    /* ─── CAMERA PIP ─────────────────────────────────────── */
-    .cam-pip {
-      position: absolute; top: 18px; right: 20px;
-      width: 60px; height: 60px;
-      border-radius: 50%; overflow: hidden;
-      border: 1.5px solid var(--border);
-      background: var(--surface-2);
-      z-index: 100;
-      opacity: 0; transform: scale(0.85);
-      transition: opacity 0.5s ease, transform 0.5s var(--spring);
-    }
-    .cam-pip.on { opacity: 1; transform: scale(1); }
-    #camVideo {
-      width: 100%; height: 100%;
-      object-fit: cover; transform: scaleX(-1); display: block;
-    }
-    .cam-dot {
-      position: absolute; bottom: 5px; right: 5px;
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--text-3); border: 1.5px solid var(--bg);
-      transition: background 0.4s ease;
-    }
-    .cam-dot.live { background: var(--accent); }
-
-    /* ─── HAND RAIL (fixed, above both steps) ────────────── */
-    .rail-wrap {
-      padding: 0 28px;
-      height: 20px;
-      display: flex; align-items: center;
-      margin-bottom: 4px;
-      flex-shrink: 0;
-      position: relative; z-index: 10;
-    }
-    .rail {
-      flex: 1; height: 1.5px;
-      background: var(--surface-2); border-radius: 2px;
-      position: relative;
-    }
-    .rail-thumb {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px 2px var(--accent-dim);
-      opacity: 0;
-      transition: left 0.06s linear, opacity 0.3s ease;
-    }
-    .rail-thumb.on { opacity: 1; }
 
     /* ─── CONTENT WRAP (steps live here) ─────────────────── */
     .content-wrap {
@@ -128,14 +71,66 @@
       display: flex; flex-direction: column;
     }
 
-    /* Step 1: song picker */
-    .step-1 {
+    /* Step 0: landing */
+    .step-0 {
       opacity: 1; transform: translateY(0);
+      align-items: center; justify-content: center;
+      padding: 0 36px; gap: 0;
       transition: opacity 0.4s ease, transform 0.4s var(--spring);
+    }
+    .step-0.out {
+      opacity: 0; transform: translateY(-18px);
+      pointer-events: none;
+    }
+
+    .landing-title {
+      font-family: var(--serif);
+      font-size: 36px; font-weight: 400;
+      color: var(--text-1);
+      text-align: center;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+    }
+    .landing-sub {
+      font-size: 13px; font-weight: 300;
+      color: var(--text-2);
+      text-align: center;
+      line-height: 1.7;
+      letter-spacing: 0.005em;
+      margin-bottom: 52px;
+    }
+    .start-btn {
+      width: 100%;
+      background: var(--accent);
+      color: #1A130E;
+      border: none;
+      border-radius: 9999px;
+      padding: 17px;
+      font-family: var(--sans);
+      font-size: 15px; font-weight: 500;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: 0 8px 36px rgba(200,135,74,0.28);
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .start-btn:active { opacity: 0.78; transform: scale(0.977); }
+
+    /* Step 1: song picker — starts hidden, revealed after landing */
+    .step-1 {
+      opacity: 0; transform: translateY(24px);
+      pointer-events: none;
+      transition: opacity 0.5s ease 0.18s, transform 0.5s var(--spring) 0.18s;
+    }
+    .step-1.in {
+      opacity: 1; transform: translateY(0);
+      pointer-events: auto;
     }
     .step-1.out {
       opacity: 0; transform: translateY(-18px);
       pointer-events: none;
+      transition: opacity 0.4s ease, transform 0.4s var(--spring);
     }
 
     /* Step 2: persona picker */
@@ -317,6 +312,106 @@
       box-shadow: 0 6px 32px rgba(200,135,74,0.28);
     }
     .begin-btn.ready:active { opacity: 0.74; transform: scale(0.975); }
+
+    /* ─── SETTINGS BUTTON ────────────────────────────────── */
+    .settings-btn {
+      position: absolute;
+      bottom: 28px; right: 28px;
+      background: none; border: none;
+      color: var(--text-3);
+      font-family: var(--sans);
+      font-size: 11px; font-weight: 400;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      cursor: pointer; padding: 10px;
+      -webkit-tap-highlight-color: transparent;
+      transition: color 0.2s ease;
+      z-index: 20;
+    }
+    .settings-btn:active { color: var(--text-2); }
+
+    /* ─── SETTINGS SHEET ─────────────────────────────────── */
+    .settings-sheet {
+      position: absolute; inset: 0;
+      z-index: 200; pointer-events: none;
+    }
+    .settings-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(18,13,9,0.74);
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .settings-panel {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 28px 28px 0 0;
+      padding: 24px 28px 48px;
+      transform: translateY(100%);
+      transition: transform 0.4s var(--spring);
+    }
+    .settings-sheet.open { pointer-events: auto; }
+    .settings-sheet.open .settings-backdrop { opacity: 1; }
+    .settings-sheet.open .settings-panel    { transform: translateY(0); }
+
+    .settings-handle {
+      width: 36px; height: 3px; border-radius: 2px;
+      background: var(--surface-2);
+      margin: 0 auto 24px;
+    }
+    .settings-title {
+      font-family: var(--serif);
+      font-size: 20px; color: var(--text-1);
+      margin-bottom: 22px;
+    }
+    .key-field { margin-bottom: 14px; }
+    .key-label-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 7px;
+    }
+    .key-label {
+      font-size: 11px; font-weight: 500;
+      letter-spacing: 0.09em; text-transform: uppercase;
+      color: var(--text-3);
+    }
+    .key-tag {
+      font-size: 11px; font-weight: 300;
+      letter-spacing: 0.02em; color: var(--text-3);
+    }
+    .key-status { font-size: 11px; color: var(--accent); letter-spacing: 0.03em; }
+    .key-input {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-family: var(--sans);
+      font-size: 13px; font-weight: 300;
+      color: var(--text-1);
+      outline: none;
+      transition: border-color 0.2s ease;
+      -webkit-appearance: none;
+    }
+    .key-input::placeholder { color: var(--text-3); }
+    .key-input:focus { border-color: rgba(200,135,74,0.35); }
+    .settings-save {
+      width: 100%; margin-top: 10px;
+      background: var(--accent); color: #1A130E;
+      border: none; border-radius: 9999px;
+      padding: 15px;
+      font-family: var(--sans); font-size: 15px; font-weight: 500;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .settings-save:active { opacity: 0.78; transform: scale(0.977); }
+    .settings-clear {
+      display: block; width: 100%; margin-top: 10px;
+      background: none; border: none;
+      font-family: var(--sans); font-size: 12px; font-weight: 300;
+      color: var(--text-3); letter-spacing: 0.03em;
+      cursor: pointer; padding: 8px; text-align: center;
+      -webkit-tap-highlight-color: transparent;
+    }
   </style>
 </head>
 <body>
@@ -324,21 +419,17 @@
 <div class="viewport">
   <div class="screen">
 
-    <!-- Camera PIP (floats above both steps) -->
-    <div class="cam-pip" id="camPip">
-      <video id="camVideo" autoplay playsinline muted></video>
-      <div class="cam-dot" id="camDot"></div>
-    </div>
-
-    <!-- Hand rail (fixed above both steps) -->
-    <div class="rail-wrap">
-      <div class="rail">
-        <div class="rail-thumb" id="railThumb"></div>
-      </div>
-    </div>
-
     <!-- ═══ CONTENT WRAP ═══════════════════════════════════ -->
     <div class="content-wrap">
+
+      <!-- ── STEP 0 · Landing ─────────────────────────── -->
+      <div class="step step-0" id="step0">
+        <div class="landing-title">your AI<br>dance partner</div>
+        <div class="landing-sub">move freely — it watches, waits,<br>and speaks when something's worth saying</div>
+        <button class="start-btn" id="startBtn">Start session</button>
+        <button class="settings-btn" id="settingsBtn">keys</button>
+      </div>
+      <!-- /step 0 -->
 
       <!-- ── STEP 1 · Song picker ──────────────────────── -->
       <div class="step step-1" id="step1">
@@ -462,6 +553,48 @@
     <!-- /content-wrap -->
 
   </div>
+
+  <!-- ── Settings sheet ────────────────────────────────── -->
+  <div class="settings-sheet" id="settingsSheet">
+    <div class="settings-backdrop" id="settingsBackdrop"></div>
+    <div class="settings-panel">
+      <div class="settings-handle"></div>
+      <div class="settings-title">API keys</div>
+
+      <div class="key-field">
+        <div class="key-label-row">
+          <span class="key-label">Anthropic</span>
+          <span class="key-status" id="anthropicStatus"></span>
+        </div>
+        <input class="key-input" id="anthropicInput" type="password"
+               placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="key-field">
+        <div class="key-label-row">
+          <span class="key-label">ElevenLabs</span>
+          <span class="key-tag">optional voice</span>
+          <span class="key-status" id="elevenStatus"></span>
+        </div>
+        <input class="key-input" id="elevenInput" type="password"
+               placeholder="API key..." autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="key-field">
+        <div class="key-label-row">
+          <span class="key-label">YouTube Music</span>
+          <span class="key-tag">playlist URL</span>
+          <span class="key-status" id="ytStatus"></span>
+        </div>
+        <input class="key-input" id="ytInput" type="url"
+               placeholder="youtube.com/playlist?list=…" autocomplete="off" spellcheck="false">
+      </div>
+
+      <button class="settings-save" id="settingsSave">Save</button>
+      <button class="settings-clear" id="settingsClear">Clear saved keys</button>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -470,9 +603,7 @@
   const N        = 3;
   const SPREAD   = 222;
   const CIRC     = 81.68;   // 2π × 13
-  const PALM_MIN = 0.52;
-  const PALM_MAX = 0.86;
-  const COOLDOWN = 1400;    // ms palm lockout after step transition
+  const COOLDOWN = 1400;    // ms lockout after step transition
 
   /* ─── DOM ─────────────────────────────────────────────── */
   const sCARDS = [0,1,2].map(i => document.getElementById(`sc${i}`));
@@ -482,42 +613,22 @@
   const pFILLS = [0,1,2].map(i => document.getElementById(`pf${i}`));
   const pDOTS  = [0,1,2].map(i => document.getElementById(`pd${i}`));
 
-  const railThumb  = document.getElementById('railThumb');
   const step1      = document.getElementById('step1');
   const step2      = document.getElementById('step2');
   const recapGenre = document.getElementById('recapGenre');
   const recapTrack = document.getElementById('recapTrack');
   const beginBtn   = document.getElementById('beginBtn');
-  const camPip     = document.getElementById('camPip');
-  const camDot     = document.getElementById('camDot');
 
   /* ─── State ───────────────────────────────────────────── */
-  let phase        = 'song';
-  let handVisible  = false;
-  let handLostTmr  = null;
+  let phase        = 'landing'; // 'landing' | 'song' | 'persona'
   let palmCooldown = false;
 
   let sActive = 1, sFloat = 1, sChosen = null;
-  let sPalmRaw = 0, sPalmSmooth = 0;
-
   let pActive = 1, pFloat = 1, pChosen = null;
-  let pPalmRaw = 0, pPalmSmooth = 0;
 
   /* ─── Helpers ─────────────────────────────────────────── */
   const lerp  = (a, b, t) => a + (b - a) * t;
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const d2    = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-
-  /* ─── Palm spread → 0..1 ──────────────────────────────── */
-  function palmIntensity(lm) {
-    const scale = d2(lm[0], lm[9]);
-    if (scale < 0.015) return 0;
-    const cx = (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5;
-    const cy = (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5;
-    const c  = { x: cx, y: cy };
-    const avg = [4,8,12,16,20].reduce((s, i) => s + d2(lm[i], c), 0) / 5;
-    return clamp((avg / scale - PALM_MIN) / (PALM_MAX - PALM_MIN), 0, 1);
-  }
 
   /* ─── Spatial card layout (shared) ───────────────────── */
   function layout(cards, fi) {
@@ -543,22 +654,6 @@
     pCARDS.forEach((c, i) => c.classList.toggle('selected', i === pActive && pChosen === null));
     pDOTS.forEach((d, i)  => d.classList.toggle('on', i === pActive));
     if (reset) { pPalmRaw = 0; pPalmSmooth = 0; }
-  }
-
-  /* ─── Palm glow on active card ────────────────────────── */
-  function applyGlow(cards, fills, idx, t) {
-    fills.forEach((f, i) => {
-      f.style.strokeDashoffset = i === idx ? CIRC * (1 - t) : CIRC;
-    });
-    cards.forEach((c, i) => {
-      if (i === idx) {
-        c.style.borderColor = `rgba(200,135,74,${0.18 + t * 0.45})`;
-        c.style.boxShadow   = `0 0 ${t * 28}px rgba(200,135,74,${t * 0.44})`;
-      } else {
-        c.style.borderColor = '';
-        c.style.boxShadow   = '';
-      }
-    });
   }
 
   /* ─── Confirm song → transition to step 2 ────────────── */
@@ -610,41 +705,37 @@
     beginBtn.classList.add('ready');
   }
 
-  /* ─── RAF loop ────────────────────────────────────────── */
+  /* ─── RAF loop (layout only) ──────────────────────────── */
   function loop() {
     if (phase === 'song') {
-      const lerpT = sPalmRaw > sPalmSmooth ? 0.22 : 0.10;
-      sPalmSmooth = lerp(sPalmSmooth, sPalmRaw, lerpT);
-      if (!handVisible) sPalmRaw = lerp(sPalmRaw, 0, 0.12);
-
-      if (sChosen === null) applyGlow(sCARDS, sFILLS, sActive, sPalmSmooth);
-      if (sPalmSmooth > 0.995 && sChosen === null) confirmSong(sActive);
-
       sFloat = lerp(sFloat, sActive, 0.1);
       layout(sCARDS, sFloat);
-
     } else if (!palmCooldown) {
-      const lerpT = pPalmRaw > pPalmSmooth ? 0.22 : 0.10;
-      pPalmSmooth = lerp(pPalmSmooth, pPalmRaw, lerpT);
-      if (!handVisible) pPalmRaw = lerp(pPalmRaw, 0, 0.12);
-
-      if (pChosen === null) applyGlow(pCARDS, pFILLS, pActive, pPalmSmooth);
-      if (pPalmSmooth > 0.995 && pChosen === null) confirmPersona(pActive);
-
       pFloat = lerp(pFloat, pActive, 0.1);
       layout(pCARDS, pFloat);
     }
-
     requestAnimationFrame(loop);
   }
 
   loop();
 
+  /* ─── Landing → song picker ──────────────────────────── */
+  document.getElementById('startBtn').addEventListener('click', () => {
+    const step0 = document.getElementById('step0');
+    step0.classList.add('out');
+    setTimeout(() => {
+      phase        = 'song';
+      palmCooldown = true;
+      step1.classList.add('in');
+      setTimeout(() => { palmCooldown = false; }, COOLDOWN);
+    }, 280);
+  });
+
   /* ─── Swipe / touch ───────────────────────────────────── */
   let tx0 = null;
   document.addEventListener('touchstart', e => { tx0 = e.touches[0].clientX; }, { passive: true });
   document.addEventListener('touchend', e => {
-    if (tx0 === null) return;
+    if (tx0 === null || phase === 'landing') return;
     const dx = e.changedTouches[0].clientX - tx0;
     if (Math.abs(dx) > 36) {
       const dir = dx < 0 ? 1 : -1;
@@ -670,76 +761,71 @@
   /* Begin */
   beginBtn.addEventListener('click', () => {
     if (!beginBtn.classList.contains('ready')) return;
+    beginBtn.disabled = true;
     beginBtn.textContent = 'Starting…';
     beginBtn.style.opacity = '0.55';
-    beginBtn.style.cursor  = 'default';
     setTimeout(() => {
       window.location.href = `session.html?song=${sChosen}&persona=${pChosen}`;
     }, 400);
   });
 
-  /* ─── MediaPipe Hands ────────────────────────────────── */
-  async function startCamera() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } }
-      });
-      const vid = document.getElementById('camVideo');
-      vid.srcObject = stream;
-      await new Promise(r => { vid.onloadedmetadata = r; });
-      camPip.classList.add('on');
+  /* ─── Settings ────────────────────────────────────────── */
+  const settingsSheet    = document.getElementById('settingsSheet');
+  const settingsBackdrop = document.getElementById('settingsBackdrop');
+  const anthropicInput   = document.getElementById('anthropicInput');
+  const elevenInput      = document.getElementById('elevenInput');
+  const ytInput          = document.getElementById('ytInput');
+  const anthropicStatus  = document.getElementById('anthropicStatus');
+  const elevenStatus     = document.getElementById('elevenStatus');
+  const ytStatus         = document.getElementById('ytStatus');
 
-      const hands = new Hands({
-        locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-      });
-      hands.setOptions({
-        maxNumHands: 1, modelComplexity: 0,
-        minDetectionConfidence: 0.72, minTrackingConfidence: 0.6
-      });
-      hands.onResults(onHands);
-
-      new Camera(vid, {
-        onFrame: async () => { await hands.send({ image: vid }); },
-        width: 320, height: 240
-      }).start();
-
-      camDot.classList.add('live');
-    } catch (_) { /* swipe-only mode */ }
+  function extractPlaylistId(url) {
+    try { return new URL(url).searchParams.get('list') || url.trim(); }
+    catch (_) { return url.trim(); }
   }
 
-  function onHands(results) {
-    if (results.multiHandLandmarks?.length > 0) {
-      const lm = results.multiHandLandmarks[0];
-      const x  = clamp(1 - lm[0].x, 0.04, 0.96);
-
-      railThumb.style.left = `${x * 100}%`;
-      railThumb.classList.add('on');
-
-      const target = Math.round(x * (N - 1));
-
-      if (phase === 'song') {
-        if (target !== sActive) activateSong(target);
-        sPalmRaw = sChosen === null ? palmIntensity(lm) : 0;
-      } else if (!palmCooldown) {
-        if (target !== pActive) activatePersona(target);
-        pPalmRaw = pChosen === null ? palmIntensity(lm) : 0;
-      }
-
-      handVisible = true;
-      if (handLostTmr) { clearTimeout(handLostTmr); handLostTmr = null; }
-
-    } else {
-      if (!handLostTmr) {
-        handLostTmr = setTimeout(() => {
-          handVisible = false;
-          railThumb.classList.remove('on');
-          handLostTmr = null;
-        }, 600);
-      }
-    }
+  function openSettings() {
+    const ak = localStorage.getItem('ANTHROPIC_KEY') || '';
+    const ek = localStorage.getItem('ELEVENLABS_KEY') || '';
+    const yt = localStorage.getItem('YOUTUBE_PLAYLIST_ID') || '';
+    anthropicInput.value = '';
+    elevenInput.value    = '';
+    ytInput.value        = '';
+    anthropicInput.placeholder = ak ? ak.slice(0, 14) + '…' : 'sk-ant-...';
+    elevenInput.placeholder    = ek ? ek.slice(0, 10) + '…' : 'API key...';
+    ytInput.placeholder        = yt ? yt.slice(0, 20) + '…' : 'youtube.com/playlist?list=…';
+    anthropicStatus.textContent = ak ? 'set' : '';
+    elevenStatus.textContent    = ek ? 'set' : '';
+    ytStatus.textContent        = yt ? 'set' : '';
+    settingsSheet.classList.add('open');
   }
 
-  setTimeout(startCamera, 400);
+  function closeSettings() { settingsSheet.classList.remove('open'); }
+
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  settingsBackdrop.addEventListener('click', closeSettings);
+
+  document.getElementById('settingsSave').addEventListener('click', () => {
+    const ak = anthropicInput.value.trim();
+    const ek = elevenInput.value.trim();
+    const yt = ytInput.value.trim();
+    if (ak) localStorage.setItem('ANTHROPIC_KEY', ak);
+    if (ek) localStorage.setItem('ELEVENLABS_KEY', ek);
+    if (yt) localStorage.setItem('YOUTUBE_PLAYLIST_ID', extractPlaylistId(yt));
+    const btn = document.getElementById('settingsSave');
+    btn.textContent = 'Saved';
+    setTimeout(() => { btn.textContent = 'Save'; closeSettings(); }, 700);
+  });
+
+  document.getElementById('settingsClear').addEventListener('click', () => {
+    localStorage.removeItem('ANTHROPIC_KEY');
+    localStorage.removeItem('ELEVENLABS_KEY');
+    localStorage.removeItem('YOUTUBE_PLAYLIST_ID');
+    anthropicStatus.textContent = '';
+    elevenStatus.textContent    = '';
+    ytStatus.textContent        = '';
+    closeSettings();
+  });
 
   /* ─── Init ────────────────────────────────────────────── */
   activateSong(1, false);
