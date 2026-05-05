@@ -454,15 +454,17 @@ function pickVoice() {
 
 function loadVoices() {
   return new Promise(resolve => {
-    const try_ = () => {
-      const voices = speechSynthesis.getVoices();
-      if (voices.length) { selectedVoice = pickVoice(); resolve(); }
-    };
-    try_();
-    if (!selectedVoice) {
-      speechSynthesis.onvoiceschanged = () => { selectedVoice = pickVoice(); resolve(); };
-      setTimeout(resolve, 1500);
-    }
+    try {
+      const try_ = () => {
+        const voices = speechSynthesis.getVoices();
+        if (voices.length) { selectedVoice = pickVoice(); resolve(); }
+      };
+      try_();
+      if (!selectedVoice) {
+        speechSynthesis.onvoiceschanged = () => { selectedVoice = pickVoice(); resolve(); };
+        setTimeout(resolve, 1500);
+      }
+    } catch (_) { resolve(); }
   });
 }
 
@@ -829,19 +831,18 @@ function startSession() {
 }
 
 async function boot() {
-  // initCamera is awaited so the motion-detection interval only starts once
-  // the video element has real frame data (loadeddata event or 4s fallback).
-  // loadVoices runs in parallel so voices are ready when speech is needed.
-  const [_cam] = await Promise.all([initCamera(), loadVoices()]);
-  try { await screen.orientation.lock('portrait'); } catch (_) {}
-
-  requestAnimationFrame(frame);
-  setInterval(detectMotion, 100);
-
+  // Register tap listeners FIRST — must not be blocked by async camera/voice init
   setTimeout(() => tapHint.classList.add('show'), 800);
-
   document.addEventListener('click',      startSession, { once: true });
   document.addEventListener('touchstart', startSession, { once: true, passive: true });
+
+  requestAnimationFrame(frame);
+
+  // Camera and voices load in parallel; motion detection starts once camera is ready
+  try { await Promise.all([initCamera(), loadVoices()]); } catch (_) {}
+  try { await screen.orientation.lock('portrait'); } catch (_) {}
+
+  setInterval(detectMotion, 100);
 }
 
 boot();
