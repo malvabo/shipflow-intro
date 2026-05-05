@@ -217,15 +217,37 @@
 
   .tap-hint.show { opacity: 1; }
   .tap-hint.hide { opacity: 0; }
+
+  .stop-btn {
+    position: absolute;
+    top: 20px; left: 20px;
+    z-index: 20;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(242,234,217,0.45);
+    font-size: 17px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .stop-btn.show { opacity: 1; pointer-events: auto; }
+  .stop-btn:active { background: rgba(255,255,255,0.13); }
 </style>
 </head>
 <body>
 
 <canvas id="motionCanvas" width="80" height="120" style="display:none"></canvas>
+<div id="yt" style="display:none"></div>
 
 <div class="phone" id="phone">
 
   <video class="cam" id="cam" autoplay muted playsinline></video>
+
+  <button class="stop-btn" id="stopBtn">&#x2715;</button>
 
   <div class="track-dot" id="trackDot"></div>
 
@@ -264,9 +286,10 @@
 // window.ELEVENLABS_KEY      = '...';    // optional; falls back to Web Speech
 // window.ELEVENLABS_VOICE_ID = '...';    // optional; defaults to Rachel
 // Set from console: localStorage.setItem('ANTHROPIC_KEY', 'sk-ant-...')
-const ANTHROPIC_KEY    = window.ANTHROPIC_KEY    || localStorage.getItem('ANTHROPIC_KEY')    || '';
-const ELEVENLABS_KEY   = window.ELEVENLABS_KEY   || localStorage.getItem('ELEVENLABS_KEY')   || '';
-const ELEVENLABS_VOICE = window.ELEVENLABS_VOICE_ID || localStorage.getItem('ELEVENLABS_VOICE_ID') || '21m00Tcm4TlvDq8ikWAM';
+const ANTHROPIC_KEY      = window.ANTHROPIC_KEY    || localStorage.getItem('ANTHROPIC_KEY')    || '';
+const ELEVENLABS_KEY     = window.ELEVENLABS_KEY   || localStorage.getItem('ELEVENLABS_KEY')   || '';
+const ELEVENLABS_VOICE   = window.ELEVENLABS_VOICE_ID || localStorage.getItem('ELEVENLABS_VOICE_ID') || '21m00Tcm4TlvDq8ikWAM';
+const YOUTUBE_PLAYLIST   = localStorage.getItem('YOUTUBE_PLAYLIST_ID') || '';
 
 // ── Reflective coach system prompt ─────────────────────────────
 const COACH_SYSTEM_PROMPT = `You are a quiet, observant movement coach watching someone dance freely in their own space. You are not a fitness app. You are not enthusiastic. You speak rarely, only when you genuinely notice something worth naming. Your voice is warm, low, and intimate — the way a trusted friend might speak in a quiet room.
@@ -338,9 +361,11 @@ let dotTimeout    = null;
 let motionSamples = [];
 let musicLooped   = false;
 let wakeLock      = null;
-let rafActive     = true;
+let rafActive      = true;
 let longPressTimer = null;
 let kickInterval   = null;
+let ytPlayer       = null;
+let ytReady        = false;
 
 // ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -353,6 +378,7 @@ const endOverlay   = document.getElementById('endOverlay');
 const trackNameEl  = document.getElementById('trackName');
 const trackDot     = document.getElementById('trackDot');
 const tapHint      = document.getElementById('tapHint');
+const stopBtn      = document.getElementById('stopBtn');
 const motionCanvas = document.getElementById('motionCanvas');
 const mCtx         = motionCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -407,6 +433,7 @@ function initAudio() {
 }
 
 function duckMusic() {
+  if (ytPlayer && ytReady) { ytPlayer.setVolume(28); return; }
   if (!masterGain || !audioCtx) return;
   const t = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(t);
@@ -414,6 +441,7 @@ function duckMusic() {
 }
 
 function unduckMusic() {
+  if (ytPlayer && ytReady) { ytPlayer.setVolume(85); return; }
   if (!masterGain || !audioCtx) return;
   const t = audioCtx.currentTime;
   masterGain.gain.cancelScheduledValues(t);
@@ -427,6 +455,28 @@ function loopMusicCue() {
   masterGain.gain.cancelScheduledValues(t);
   masterGain.gain.setTargetAtTime(0.05, t, 0.12);
   masterGain.gain.setTargetAtTime(0.42, t + 0.65, 0.22);
+}
+
+// ── YouTube player ─────────────────────────────────────────────
+function initYouTube() {
+  if (!YOUTUBE_PLAYLIST) return;
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+  window.onYouTubeIframeAPIReady = () => {
+    ytPlayer = new YT.Player('yt', {
+      height: '1', width: '1',
+      playerVars: {
+        listType: 'playlist', list: YOUTUBE_PLAYLIST,
+        autoplay: 0, controls: 0, disablekb: 1,
+        fs: 0, iv_load_policy: 3, modestbranding: 1,
+      },
+      events: {
+        onReady: () => { ytReady = true; },
+        onError: () => { ytReady = false; },
+      },
+    });
+  };
 }
 
 // ── Voice selection ────────────────────────────────────────────
@@ -781,6 +831,7 @@ function confirmEnd() {
   phone.classList.add('ended');
 
   clearInterval(kickInterval); kickInterval = null;
+  if (ytPlayer && ytReady) { try { ytPlayer.stopVideo(); } catch (_) {} }
   speechSynthesis.cancel();
   if (masterGain && audioCtx) {
     const t = audioCtx.currentTime;
@@ -796,6 +847,7 @@ function confirmEnd() {
 
 endOverlay.addEventListener('click', e => { if (e.target === endOverlay) dismissEnd(); });
 document.getElementById('endBtn').addEventListener('click', confirmEnd);
+stopBtn.addEventListener('click', showEnd);
 
 phone.addEventListener('mousedown',  () => { longPressTimer = setTimeout(showEnd, 1500); });
 phone.addEventListener('mouseup',    () => clearTimeout(longPressTimer));
@@ -824,14 +876,26 @@ function startSession() {
 
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
+  stopBtn.classList.add('show');
 
   // Brief amber flash so the user knows the tap registered
   circleEl.classList.add('amber');
   setTimeout(() => circleEl.classList.remove('amber'), 600);
 
+  // Use YouTube if a playlist is set, else fall back to synth
+  if (ytPlayer && ytReady) {
+    ytPlayer.setVolume(85);
+    ytPlayer.setShuffle(true);
+    ytPlayer.playVideo();
+  } else if (!YOUTUBE_PLAYLIST) {
+    initAudio();
+  }
+
   sessionActive = true;
   lastSpeakTime = Date.now() - (GAP_MS - 6000); // first utterance possible after 6s
 }
+
+initYouTube();
 
 // Tap listeners registered synchronously — no async path can block them
 setTimeout(() => tapHint.classList.add('show'), 800);

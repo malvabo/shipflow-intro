@@ -580,6 +580,16 @@
                placeholder="API key..." autocomplete="off" spellcheck="false">
       </div>
 
+      <div class="key-field">
+        <div class="key-label-row">
+          <span class="key-label">YouTube Music</span>
+          <span class="key-tag">playlist URL</span>
+          <span class="key-status" id="ytStatus"></span>
+        </div>
+        <input class="key-input" id="ytInput" type="url"
+               placeholder="youtube.com/playlist?list=…" autocomplete="off" spellcheck="false">
+      </div>
+
       <button class="settings-save" id="settingsSave">Save</button>
       <button class="settings-clear" id="settingsClear">Clear saved keys</button>
     </div>
@@ -764,18 +774,29 @@
   const settingsBackdrop = document.getElementById('settingsBackdrop');
   const anthropicInput   = document.getElementById('anthropicInput');
   const elevenInput      = document.getElementById('elevenInput');
+  const ytInput          = document.getElementById('ytInput');
   const anthropicStatus  = document.getElementById('anthropicStatus');
   const elevenStatus     = document.getElementById('elevenStatus');
+  const ytStatus         = document.getElementById('ytStatus');
+
+  function extractPlaylistId(url) {
+    try { return new URL(url).searchParams.get('list') || url.trim(); }
+    catch (_) { return url.trim(); }
+  }
 
   function openSettings() {
     const ak = localStorage.getItem('ANTHROPIC_KEY') || '';
     const ek = localStorage.getItem('ELEVENLABS_KEY') || '';
+    const yt = localStorage.getItem('YOUTUBE_PLAYLIST_ID') || '';
     anthropicInput.value = '';
     elevenInput.value    = '';
+    ytInput.value        = '';
     anthropicInput.placeholder = ak ? ak.slice(0, 14) + '…' : 'sk-ant-...';
     elevenInput.placeholder    = ek ? ek.slice(0, 10) + '…' : 'API key...';
+    ytInput.placeholder        = yt ? yt.slice(0, 20) + '…' : 'youtube.com/playlist?list=…';
     anthropicStatus.textContent = ak ? 'set' : '';
     elevenStatus.textContent    = ek ? 'set' : '';
+    ytStatus.textContent        = yt ? 'set' : '';
     settingsSheet.classList.add('open');
   }
 
@@ -787,8 +808,10 @@
   document.getElementById('settingsSave').addEventListener('click', () => {
     const ak = anthropicInput.value.trim();
     const ek = elevenInput.value.trim();
+    const yt = ytInput.value.trim();
     if (ak) localStorage.setItem('ANTHROPIC_KEY', ak);
     if (ek) localStorage.setItem('ELEVENLABS_KEY', ek);
+    if (yt) localStorage.setItem('YOUTUBE_PLAYLIST_ID', extractPlaylistId(yt));
     const btn = document.getElementById('settingsSave');
     btn.textContent = 'Saved';
     setTimeout(() => { btn.textContent = 'Save'; closeSettings(); }, 700);
@@ -797,8 +820,10 @@
   document.getElementById('settingsClear').addEventListener('click', () => {
     localStorage.removeItem('ANTHROPIC_KEY');
     localStorage.removeItem('ELEVENLABS_KEY');
+    localStorage.removeItem('YOUTUBE_PLAYLIST_ID');
     anthropicStatus.textContent = '';
     elevenStatus.textContent    = '';
+    ytStatus.textContent        = '';
     closeSettings();
   });
 
