@@ -878,7 +878,6 @@ function startSession() {
   prime.volume = 0.01; prime.rate = 10;
   speechSynthesis.speak(prime);
 
-  initAudio();
   // Wake-lock requires user activation on Safari — request it inside the gesture.
   initWakeLock();
 
