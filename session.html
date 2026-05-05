@@ -372,6 +372,7 @@ let kickInterval   = null;
 let ytPlayer       = null;
 let ytReady        = false;
 let ytPlayPending  = false;
+let ytPlaying      = false;
 
 // ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -486,7 +487,14 @@ function initYouTube() {
             ytPlayer.playVideo();
           }
         },
-        onError: () => { ytReady = false; },
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.PLAYING) ytPlaying = true;
+        },
+        onError: () => {
+          ytReady = false;
+          ytPlayPending = false;
+          if (sessionActive && !audioCtx) initAudio();
+        },
       },
     });
   };
@@ -907,6 +915,10 @@ function startSession() {
 }
 
 initYouTube();
+if (YOUTUBE_PLAYLIST) {
+  // If YouTube hasn't become ready in 10s (blocked, slow, invalid ID) fall back to synth
+  setTimeout(() => { if (!ytReady && !audioCtx) initAudio(); }, 10000);
+}
 
 // Tap listeners registered synchronously — no async path can block them
 setTimeout(() => tapHint.classList.add('show'), 800);
