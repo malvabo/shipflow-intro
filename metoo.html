@@ -37,19 +37,14 @@
       overscroll-behavior: none;
     }
 
+    html, body { background: var(--bg); }
+
     /* ─── PHONE FRAME ────────────────────────────────────── */
     .viewport {
-      width: 375px; height: 812px;
+      width: 100vw; height: 100dvh;
       background: var(--bg);
-      border-radius: 50px;
       overflow: hidden;
       position: relative;
-      border: 1.5px solid rgba(255,255,255,0.06);
-      box-shadow: 0 0 0 10px #0C0906, 0 64px 140px rgba(0,0,0,0.82);
-    }
-    @media (max-width: 420px), (pointer: coarse) {
-      .viewport { width: 100vw; height: 100dvh; border-radius: 0; box-shadow: none; border: none; }
-      html, body { background: var(--bg); }
     }
 
     /* ─── SCREEN ─────────────────────────────────────────── */
