@@ -241,6 +241,25 @@
   }
   .stop-btn.show { opacity: 1; pointer-events: auto; }
   .stop-btn:active { background: rgba(255,255,255,0.13); }
+
+  .pause-btn {
+    position: absolute;
+    top: 20px; left: 64px;
+    z-index: 20;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(242,234,217,0.45);
+    font-size: 15px; line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .pause-btn.show { opacity: 1; pointer-events: auto; }
+  .pause-btn:active { background: rgba(255,255,255,0.13); }
 </style>
 </head>
 <body>
@@ -253,6 +272,7 @@
   <video class="cam" id="cam" autoplay muted playsinline></video>
 
   <button class="stop-btn" id="stopBtn">&#x2715;</button>
+  <button class="pause-btn" id="pauseBtn">&#x23F8;</button>
 
   <div class="track-dot" id="trackDot"></div>
 
@@ -373,6 +393,7 @@ let ytPlayer       = null;
 let ytReady        = false;
 let ytPlayPending  = false;
 let ytPlaying      = false;
+let paused         = false;
 
 // ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -386,6 +407,7 @@ const trackNameEl  = document.getElementById('trackName');
 const trackDot     = document.getElementById('trackDot');
 const tapHint      = document.getElementById('tapHint');
 const stopBtn      = document.getElementById('stopBtn');
+const pauseBtn     = document.getElementById('pauseBtn');
 const motionCanvas = document.getElementById('motionCanvas');
 const mCtx         = motionCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -475,17 +497,19 @@ function initYouTube() {
       height: '1', width: '1',
       playerVars: {
         listType: 'playlist', list: YOUTUBE_PLAYLIST,
-        autoplay: 0, controls: 0, disablekb: 1,
+        autoplay: 1, mute: 1,  // muted autoplay always allowed; unmute on session start
+        controls: 0, disablekb: 1,
         fs: 0, iv_load_policy: 3, modestbranding: 1,
       },
       events: {
         onReady: () => {
           ytReady = true;
+          ytPlayer.setVolume(85);
           if (ytPlayPending) {
             ytPlayPending = false;
-            ytPlayer.setVolume(85);
-            ytPlayer.playVideo();
+            ytPlayer.unMute();  // user already tapped — unmute now
           }
+          // if user hasn't tapped yet, player buffers muted; unMute() fires on tap
         },
         onStateChange: (e) => {
           if (e.data === YT.PlayerState.PLAYING) ytPlaying = true;
@@ -865,6 +889,21 @@ endOverlay.addEventListener('click', e => { if (e.target === endOverlay) dismiss
 document.getElementById('endBtn').addEventListener('click', confirmEnd);
 stopBtn.addEventListener('click', showEnd);
 
+pauseBtn.addEventListener('click', () => {
+  paused = !paused;
+  pauseBtn.innerHTML = paused ? '&#x23F5;' : '&#x23F8;';
+  if (paused) {
+    sessionActive = false;
+    if (ytPlayer && ytReady)          { try { ytPlayer.pauseVideo(); } catch (_) {} }
+    else if (masterGain && audioCtx)  { masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15); }
+  } else {
+    sessionActive = true;
+    lastSpeakTime = Date.now(); // prevent coach firing the instant we resume
+    if (ytPlayer && ytReady)          { try { ytPlayer.playVideo(); } catch (_) {} }
+    else if (masterGain && audioCtx)  { masterGain.gain.setTargetAtTime(0.42, audioCtx.currentTime, 0.25); }
+  }
+});
+
 phone.addEventListener('mousedown',  () => { longPressTimer = setTimeout(showEnd, 1500); });
 phone.addEventListener('mouseup',    () => clearTimeout(longPressTimer));
 phone.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
@@ -892,6 +931,7 @@ function startSession() {
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
   stopBtn.classList.add('show');
+  pauseBtn.classList.add('show');
   trackDot.classList.add('session');
 
   // Brief amber flash so the user knows the tap registered
@@ -902,9 +942,9 @@ function startSession() {
   if (YOUTUBE_PLAYLIST) {
     if (ytPlayer && ytReady) {
       ytPlayer.setVolume(85);
-      ytPlayer.playVideo();
+      ytPlayer.unMute();  // player already buffering muted — just unmute
     } else {
-      ytPlayPending = true; // player still loading — play as soon as onReady fires
+      ytPlayPending = true; // onReady will unMute when it fires
     }
   } else {
     initAudio();
