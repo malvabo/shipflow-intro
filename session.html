@@ -246,7 +246,7 @@
 <body>
 
 <canvas id="motionCanvas" width="80" height="120" style="display:none"></canvas>
-<div id="yt" style="display:none"></div>
+<div id="yt" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></div>
 
 <div class="phone" id="phone">
 
@@ -371,6 +371,7 @@ let longPressTimer = null;
 let kickInterval   = null;
 let ytPlayer       = null;
 let ytReady        = false;
+let ytPlayPending  = false;
 
 // ── DOM ────────────────────────────────────────────────────────
 const phone        = document.getElementById('phone');
@@ -477,7 +478,14 @@ function initYouTube() {
         fs: 0, iv_load_policy: 3, modestbranding: 1,
       },
       events: {
-        onReady: () => { ytReady = true; },
+        onReady: () => {
+          ytReady = true;
+          if (ytPlayPending) {
+            ytPlayPending = false;
+            ytPlayer.setVolume(85);
+            ytPlayer.playVideo();
+          }
+        },
         onError: () => { ytReady = false; },
       },
     });
@@ -884,11 +892,14 @@ function startSession() {
   setTimeout(() => circleEl.classList.remove('amber'), 600);
 
   // Use YouTube if a playlist is set, else fall back to synth
-  if (ytPlayer && ytReady) {
-    ytPlayer.setVolume(85);
-    ytPlayer.setShuffle(true);
-    ytPlayer.playVideo();
-  } else if (!YOUTUBE_PLAYLIST) {
+  if (YOUTUBE_PLAYLIST) {
+    if (ytPlayer && ytReady) {
+      ytPlayer.setVolume(85);
+      ytPlayer.playVideo();
+    } else {
+      ytPlayPending = true; // player still loading — play as soon as onReady fires
+    }
+  } else {
     initAudio();
   }
 
