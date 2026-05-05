@@ -56,18 +56,23 @@
 
   .track-dot {
     position: absolute;
-    width: 9px; height: 9px;
+    top: 28px; right: 130px;
+    width: 8px; height: 8px;
     border-radius: 50%;
-    background: var(--track);
-    box-shadow: 0 0 10px rgba(90,158,112,0.55);
+    background: rgba(200, 70, 70, 0.75);
+    box-shadow: 0 0 7px rgba(200,70,70,0.4);
     pointer-events: none;
     z-index: 8;
-    transform: translate(-50%, -50%);
     opacity: 0;
-    transition: left 0.12s ease, top 0.12s ease, opacity 0.4s ease;
+    transition: background 0.4s ease, box-shadow 0.4s ease, opacity 0.4s ease;
   }
 
-  .track-dot.active { opacity: 1; }
+  .track-dot.session { opacity: 1; }
+
+  .track-dot.active {
+    background: var(--track);
+    box-shadow: 0 0 10px rgba(90,158,112,0.55);
+  }
 
   .circle {
     position: absolute;
@@ -608,11 +613,6 @@ function detectMotion() {
 
   if (count < M_MIN_PIX) return;
 
-  // Green tracking dot — mirror x to match flipped video, scale to actual viewport
-  const cx = (1 - sumX / count / M_W) * phone.clientWidth;
-  const cy = (sumY / count / M_H) * phone.clientHeight;
-  trackDot.style.left = cx + 'px';
-  trackDot.style.top  = cy + 'px';
   trackDot.classList.add('active');
   clearTimeout(dotTimeout);
   dotTimeout = setTimeout(() => trackDot.classList.remove('active'), 900);
@@ -877,6 +877,7 @@ function startSession() {
   tapHint.classList.remove('show');
   tapHint.classList.add('hide');
   stopBtn.classList.add('show');
+  trackDot.classList.add('session');
 
   // Brief amber flash so the user knows the tap registered
   circleEl.classList.add('amber');
